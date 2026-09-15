@@ -11,7 +11,7 @@
  * Enumerating the files here instead means `npm test` behaves identically in
  * cmd.exe, PowerShell, bash and CI, on any supported Node.
  */
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,19 @@ const files = readdirSync(testDir)
   .filter((f) => f.endsWith(".test.ts"))
   .sort()
   .map((f) => join(testDir, f));
+
+// Extension packages are plain ES modules rather than TypeScript, because an
+// extension ships as the source the host snapshots and digests — there is no
+// build step between what is written and what is approved. They still belong in
+// `npm test`: an extension that drifts from the API it consumes is a broken
+// extension, and nothing else in this suite would notice.
+const extensionsDir = join(repoRoot, "extensions");
+if (existsSync(extensionsDir)) {
+  for (const pkg of readdirSync(extensionsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).sort()) {
+    const dir = join(extensionsDir, pkg.name);
+    files.push(...readdirSync(dir).filter((f) => f.endsWith(".test.mjs")).sort().map((f) => join(dir, f)));
+  }
+}
 
 if (files.length === 0) {
   console.error(`✗ no test files found in ${testDir}`);

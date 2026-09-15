@@ -181,3 +181,18 @@ valid events remain readable. Interactive diagnostic controls are sanitized.
 Containment does not prove an extension's returned statements. An approved module
 can return misleading edges or diagnostics. Provenance, conservative verification,
 and a labelled evaluation corpus remain necessary.
+
+## Bundled packages
+
+`extensions/rails-seam/` is a worked example that ships with this repository: a
+cross-language `serves` scanner and a runtime dispatch analyzer for Rails. It is
+not loaded automatically — it is granted by path like any other package, and its
+own README documents its configuration.
+
+```sh
+graft ext allow extensions/rails-seam/extension.mjs . --config rails.json
+graft ext allow extensions/rails-seam/runtime.mjs   . --config rails.json
+```
+
+It exists because an extension API is only as good as the hardest consumer
+anyone actually wrote against it. Its tests run in `npm test`.
