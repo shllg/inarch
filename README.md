@@ -25,12 +25,19 @@ commits it is built on are his. Everything above the depth tiers is new here.
 ## Install
 
 ```bash
-npm install -g "git+https://github.com/shllg/inarch.git#v0.18.0"
+npm install -g "git+https://github.com/shllg/inarch.git#inarch/v0.19.0"
 inarch --version
 ```
 
 Installing from a git tag is the whole distribution story. There is no npm
 package; see [Support](#support) for what that implies.
+
+Release tags are prefixed `inarch/v…` because the repository also carries the
+upstream release tags it was forked from, and `v0.18.0` there is Graft's, not
+ours. The version restarts the minor series rather than continuing upstream's:
+this tree is upstream 0.18.0 minus the hosted server and the telemetry, plus
+Ruby, Rails and extensions, and calling that 0.18.0 would claim a parity it
+does not have.
 
 Node 20 or newer. On a machine with `ignore-scripts=true` in its npm config, add
 `--ignore-scripts=false` — one grammar ships no prebuild and must compile.
