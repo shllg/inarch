@@ -1,5 +1,5 @@
 /**
- * Did the agent actually TELL the user what graft saved?
+ * Did the agent actually TELL the user what inarch saved?
  *
  * `savedTokens` (state.ts) counts what graft *computed* — every
  * `[graft] tokens saved ≈ N` footer the PostToolUse accumulator swept up. That
@@ -30,17 +30,21 @@ import { turnInputCostMicros, turnInputTokens } from '../context/price.js';
 const TAIL_BYTES = 1024 * 1024;
 
 /**
- * The tally, as the agent is actually asked to write it: a "graft saved ~N
+ * The tally, as the agent is actually asked to write it: an "inarch saved ~N
  * tokens" claim in prose. Deliberately loose about the decoration around it —
  * the 🌱, the "this turn", the "(3 calls)" suffix and the thousands separator
  * are all optional in practice, and a metric that only counted the one exact
  * phrasing from the example would measure the agent's formatting rather than
- * whether the user was told. Anchored on "graft saved" + a number + "tokens" so
- * ordinary prose about graft can't trip it.
+ * whether the user was told. Anchored on the name + a number + "tokens" so
+ * ordinary prose about the tool can't trip it.
+ *
+ * The inherited spelling stays in the alternation: a repo still carrying a
+ * pre-rename skill card asks the agent for "graft saved ~N", and counting that
+ * as untold would report a wiring lag as a behaviour regression.
  */
-const TALLY = /graft\s+saved\s*[~≈]?\s*[\d,.]+\s*[km]?\s*(?:tok|tokens)/i;
+const TALLY = /(?:inarch|graft)\s+saved\s*[~≈]?\s*[\d,.]+\s*[km]?\s*(?:tok|tokens)/i;
 
-/** Did this reply tell the user what graft saved? */
+/** Did this reply tell the user what inarch saved? */
 export function hasSavingsTally(text: string): boolean {
   return TALLY.test(text);
 }

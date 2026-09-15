@@ -89,19 +89,19 @@ export function setInputRate(usdPerMtok: number | null): void {
  * `hasSavingsTally` (claude/tally.ts) recognises, so adding money here does not
  * quietly zero the reported-turns metric. */
 export function savingsTurnNudge(savedTokens: number): string {
-  const sum = ' — sum each such line across your graft calls — e.g. ';
+  const sum = ' — sum each such line across your inarch calls — e.g. ';
   if (inputRateUsdPerMtok === null || savedTokens <= 0) {
     return (
-      ' At the end of your reply, tell the user the total graft tokens saved ' +
-      `this turn${sum}"🌱 graft saved ~N tokens this turn".`
+      ' At the end of your reply, tell the user the total inarch tokens saved ' +
+      `this turn${sum}"🌱 inarch saved ~N tokens this turn".`
     );
   }
   const usd = (savedTokens * inputRateUsdPerMtok) / 1_000_000;
   return (
     ` This call is worth ${formatDollars(usd)} at the rate this session is ` +
     'actually paying for input tokens. At the end of your reply, tell the user ' +
-    `the total graft tokens saved this turn and what they were worth${sum}` +
-    '"🌱 graft saved ~N tokens (~$X) this turn".'
+    `the total inarch tokens saved this turn and what they were worth${sum}` +
+    '"🌱 inarch saved ~N tokens (~$X) this turn".'
   );
 }
 
@@ -128,7 +128,7 @@ export function savingsLine(body: string, saved: Savings | undefined): string {
 /**
  * Sum every `[graft] tokens saved ≈ N` footer in a blob of text — the reader
  * half of {@link savingsLine}, kept next to the writer so the two never drift.
- * A single blob can carry several (an agent that made two graft calls in one
+ * A single blob can carry several (an agent that made two inarch calls in one
  * turn); the nudge from `savingsTurnNudge` deliberately omits the pattern, so its example
  * text is not miscounted here.
  */

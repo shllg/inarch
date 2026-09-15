@@ -225,7 +225,7 @@ export function formatOrientation(indexMd: string, budgetBytes = 1500, staleNote
     `  In a monorepo, add --in <path>/ to ask/grep/callers to scope to one sub-project; hits are labeled [scope/].\n` +
     `  Already know the file or symbol to change? Go straight to it: inarch grep "<symbol>", read the span, edit. Save ask for when you don't yet know where the code lives.\n` +
     `  Refactor, rename, or multi-file change? Run inarch callers <sym> --depth all FIRST to map every connected file; editing the primary file and stopping is the classic miss (platform siblings, a new file to extract).\n` +
-    `Each tool opens its output with a "[graft] tokens saved ≈ N" line, sometimes with its dollar value; when you used graft this turn, close your reply with a one-line tally of the total saved, dollars included when given (e.g. 🌱 graft saved ~12k tokens (~$0.04) this turn, 3 calls). Never price tokens yourself; never pipe graft through head/tail — it is already capped, and clipping drops that line.\n`;
+    `Each tool opens its output with a "[graft] tokens saved ≈ N" line, sometimes with its dollar value; when you used inarch this turn, close your reply with a one-line tally of the total saved, dollars included when given (e.g. 🌱 inarch saved ~12k tokens (~$0.04) this turn, 3 calls). Never price tokens yourself; never pipe inarch through head/tail — it is already capped, and clipping drops that line.\n`;
   const banner = staleNote ? `${staleNote}\n\n` : "";
   return `${banner}${directive}\nrepo map (graft/INDEX.md):\n${indexMd.slice(0, budgetBytes)}`;
 }

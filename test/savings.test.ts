@@ -52,7 +52,7 @@ test('savingsLine: reports saved tokens and percent when the output is smaller',
   assert.ok(footer.includes((base - toTokens(body.length)).toLocaleString()));
   // The nudge rides along so the agent reports the turn total without SKILL.md.
   assert.match(footer, /end of your reply/i);
-  assert.match(footer, /graft saved ~N tokens this turn/);
+  assert.match(footer, /inarch saved ~N tokens this turn/);
   // The nudge must NOT introduce a second "[graft] tokens saved ≈ <n>" token —
   // the PostToolUse accumulator sums every such match, so a stray one double-counts.
   assert.equal((footer.match(/\[graft\] tokens saved ≈ [\d,]+/g) ?? []).length, 1);
@@ -83,7 +83,7 @@ test('withSavings: returns the body untouched when there is nothing to claim', (
 test('the turn nudge carries no dollar figure until a rate is set', () => {
   setInputRate(null);
   const footer = savingsLine('body', { files: 2, baselineChars: 8000 });
-  assert.match(footer, /graft saved ~N tokens this turn/);
+  assert.match(footer, /inarch saved ~N tokens this turn/);
   assert.doesNotMatch(footer, /\$/, 'no rate measured, so nothing is priced');
 });
 
