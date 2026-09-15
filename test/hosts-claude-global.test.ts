@@ -11,7 +11,7 @@
  * git chooses to carry across.
  *
  * The rest hold the two properties that keep the fix safe to ship: nothing lands in
- * `~` when `--no-global` is passed, and `graft uninstall` removes exactly what an
+ * `~` when `--no-global` is passed, and `inarch uninstall` removes exactly what an
  * init added.
  */
 import { test } from 'node:test';
@@ -101,7 +101,7 @@ test('a worktree of a repo that ignores *.json loses both repo-level triggers', 
   // reaches it, and Claude Code reads it for every project including this one.
   assert.ok(existsSync(shimOf(home)));
   assert.ok(readJson(settingsOf(home)).hooks?.SessionStart, 'user-level SessionStart hook');
-  assert.ok(readJson(userMcpOf(home)).mcpServers?.graft, 'user-scope MCP registration');
+  assert.ok(readJson(userMcpOf(home)).mcpServers?.inarch, 'user-scope MCP registration');
 });
 
 test('the user-level hook commands name the shim absolutely, not via CLAUDE_PROJECT_DIR', () => {
@@ -144,7 +144,7 @@ test('an existing user-scope MCP server survives, and re-running converges', () 
   installClaudeGlobal(home);
   const first = readJson(userMcpOf(home));
   assert.ok(first.mcpServers.paper, 'a foreign server is preserved');
-  assert.ok(first.mcpServers.graft);
+  assert.ok(first.mcpServers.inarch);
 
   const second = installClaudeGlobal(home);
   assert.ok(second.every((w) => w.action === 'unchanged'), `idempotent, got ${JSON.stringify(second)}`);
@@ -210,7 +210,7 @@ test('uninstall removes exactly what the global install added', () => {
   assert.equal(s.hooks, undefined, 'graft hooks gone');
   assert.equal(s.theme, 'light', "the user's own settings survive");
   const mcp = readJson(userMcpOf(home));
-  assert.equal(mcp.mcpServers.graft, undefined, 'graft server gone');
+  assert.equal(mcp.mcpServers.inarch, undefined, 'graft server gone');
   assert.ok(mcp.mcpServers.paper, 'the foreign server survives');
 });
 

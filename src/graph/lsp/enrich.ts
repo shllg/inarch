@@ -1,5 +1,5 @@
 /**
- * Opt-in LSP enrichment (`graft build --lsp`): add compiler-grade call edges the
+ * Opt-in LSP enrichment (`inarch build --lsp`): add compiler-grade call edges the
  * AST resolver couldn't — chiefly member calls (`obj.foo()`) whose receiver type
  * graft can't infer, and every call in the generic breadth tier (which has no
  * receiver typing at all). For each function/method node we ask the language

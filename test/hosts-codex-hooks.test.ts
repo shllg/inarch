@@ -32,7 +32,7 @@ test('writes shim + hooks.json entry, idempotent on re-run', () => {
   mkdirSync(join(home, '.codex'), { recursive: true });
   const w = installCodexHooks(home);
   assert.equal(w.length, 2);
-  const shim = join(home, '.codex', 'hooks', 'graft', 'graft-hooks.cjs');
+  const shim = join(home, '.codex', 'hooks', 'inarch', 'graft-hooks.cjs');
   assertRunnableShim(shim, 'shim is executable');
   const cfg = JSON.parse(readFileSync(join(home, '.codex', 'hooks.json'), 'utf8'));
   // Full Claude-Code parity: retrieval on prompt, orientation on start, blast
@@ -115,7 +115,7 @@ test('re-heals shim exec bit when a prior install had its mode stripped', () => 
   const home = fresh();
   mkdirSync(join(home, '.codex'), { recursive: true });
   installCodexHooks(home);
-  const shim = join(home, '.codex', 'hooks', 'graft', 'graft-hooks.cjs');
+  const shim = join(home, '.codex', 'hooks', 'inarch', 'graft-hooks.cjs');
   if (HAS_EXEC_BIT) {
     chmodSync(shim, 0o644);
     assert.ok(!(statSync(shim).mode & 0o111), 'exec bit stripped before re-run');

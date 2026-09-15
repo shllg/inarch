@@ -8,7 +8,7 @@
  * baseline has a known size (a pre-`chars` graph), the estimate is omitted
  * rather than faked.
  *
- * `graft ask` keeps its own footer (it carries an escalation nudge and feeds
+ * `inarch ask` keeps its own footer (it carries an escalation nudge and feeds
  * the session saved-token counter); everything else — skeleton, grep, callers,
  * map — routes through {@link savingsFor} + {@link withSavings} here.
  */

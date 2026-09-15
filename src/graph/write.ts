@@ -48,7 +48,7 @@ export function writeGraph(graph: GraphV1, outDir: string): string {
   //
   // pid in the temp name, and removed when the write fails — the same discipline
   // `writeJsonAtomic` (util/state.ts) documents: a fixed name lets a concurrent
-  // build (a manual `graft build` racing the refresh child) write the same scratch
+  // build (a manual `inarch build` racing the refresh child) write the same scratch
   // file and hand the loser a corrupt graph, and a failed rename would otherwise
   // leave a full-size orphan behind that nothing ever cleans up.
   const tmp = `${path}.${process.pid}.tmp`;

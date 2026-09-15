@@ -4,7 +4,7 @@ import { readWiring, computeStats } from './stats.js';
 import { patchStats, releaseLock, resolveContextDir } from './state.js';
 import { graftCliPath } from './paths.js';
 
-/** MONEY GUARD: plain `graft build` only — structural, $0, offline. Never --deep. */
+/** MONEY GUARD: plain `inarch build` only — structural, $0, offline. Never --deep. */
 function realBuild(dir: string): void {
   // GRAFT_TEST_CLI is the same seam hooks.ts's graftJson uses, so a test can
   // point this at a stub and inspect the exact argv it was invoked with.

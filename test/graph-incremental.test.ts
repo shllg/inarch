@@ -380,8 +380,8 @@ test("two grafts on one repo keep separate memos instead of evicting each other"
   assert.ok(basename(mine).includes(extractorStamp()!), `stamp missing from ${basename(mine)}`);
   assert.ok(basename(fingerprintPath(outOf(d))).includes(extractorStamp()!), "same for the probe sidecar");
 
-  // Stand in for the other install — `graft init` wires the MCP server as
-  // `npx -y @nanonets/graft` while the hooks run the locally installed dist, so two
+  // Stand in for the other install — `inarch init` wires the MCP server as
+  // `npx -y inarch` while the hooks run the locally installed dist, so two
   // different versions on one repo is the DEFAULT setup, not an exotic one. With a
   // single shared filename they took turns rejecting each other's entries and
   // cold-re-parsing the whole repo on every call.
@@ -436,10 +436,10 @@ test("an incremental rebuild leaves the ask sidecar agreeing with the graph", as
 });
 
 /**
- * `graft check` re-reads and re-hashes every file; the builder must too. If the
+ * `inarch check` re-reads and re-hashes every file; the builder must too. If the
  * builder trusted `(size, mtimeMs)` the way the probe does, then on a filesystem with
  * coarse mtime granularity a same-length edit inside one tick would leave `graft
- * check` reporting drift that the `graft build` it recommends could not repair — the
+ * check` reporting drift that the `inarch build` it recommends could not repair — the
  * documented fix, doing nothing, forever.
  */
 test("a build repairs an edit that leaves size and mtime untouched", async () => {

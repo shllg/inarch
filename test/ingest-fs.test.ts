@@ -190,7 +190,7 @@ test("walkDir retains fixed skips and filesystem fallback outside Git", () => {
  * git-child filter (src/graph/scopes.ts). This introduces `shouldSkipDir` as
  * the single source of truth, with an optional `includes` param: a name in it
  * is removed from the effective skip set for this repo's walks (persisted via
- * `graft build --include-dir`), while a dot-directory stays non-overridable
+ * `inarch build --include-dir`), while a dot-directory stays non-overridable
  * regardless.
  *
  * `--include-dir` lifts only graft's OWN skip list. In a Git repo, Git's

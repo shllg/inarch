@@ -1,5 +1,5 @@
 {
-  "name": "@nanonets/graft",
+  "name": "inarch",
   "version": "0.18.0",
   "description": "Build a repo's context graph as a folder of linked markdown files: a local, regenerable cache that every query keeps in sync with your code.",
   "keywords": [
@@ -14,11 +14,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NanoNets/context-graph-engine.git"
+    "url": "git+https://github.com/shllg/inarch.git"
   },
-  "homepage": "https://github.com/NanoNets/context-graph-engine#readme",
+  "homepage": "https://github.com/shllg/inarch#readme",
   "bugs": {
-    "url": "https://github.com/NanoNets/context-graph-engine/issues"
+    "url": "https://github.com/shllg/inarch/issues"
   },
   "publishConfig": {
     "access": "public"
@@ -34,7 +34,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "graft": "dist/cli.js"
+    "inarch": "dist/cli.js"
   },
   "files": [
     "dist",

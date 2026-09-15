@@ -76,9 +76,9 @@ export function isGraftMcpTool(toolName: string): boolean {
 export function commandInvokesGraft(command: string): boolean {
   const c = command.trim();
   if (/dist[/\\]cli\.js/.test(c)) return true; // running from a source checkout
-  // `graft …`, `graft-dev …`, `npx [-y] [@nanonets/]graft …`, at the start of the
+  // `inarch …`, `inarch-dev …`, `npx [-y] inarch …`, at the start of the
   // line or of a &&/;/| segment — not "mygraft" or a path that merely contains it.
-  return /(^|[|&;]\s*)(npx\s+(-y\s+)?(@nanonets\/)?)?graft(-dev)?\b/i.test(c);
+  return /(^|[|&;]\s*)(npx\s+(-y\s+)?)?(inarch|graft)(-dev)?\b/i.test(c);
 }
 
 /**
@@ -146,7 +146,7 @@ export interface SessionSummary extends SessionState {
 }
 
 /** The most-recently-touched session file for a repo, or null when none exist —
- *  what `graft stats` shows by default: the session you were just in. */
+ *  what `inarch stats` shows by default: the session you were just in. */
 export function latestSession(dir: string): SessionSummary | null {
   const sdir = sessionDir(dir);
   let bestId: string | null = null;
@@ -185,7 +185,7 @@ export function sessionInputRate(dir: string): number | null {
 
 export function formatSessionStats(s: SessionSummary | null): string {
   if (s === null) {
-    return 'graft stats: no session recorded yet — use graft in an agent session, then look again.';
+    return 'inarch stats: no session recorded yet — use graft in an agent session, then look again.';
   }
   const graft = s.graftReads ?? 0;
   const source = s.sourceReads ?? 0;
@@ -194,7 +194,7 @@ export function formatSessionStats(s: SessionSummary | null): string {
   const mix =
     total === 0 ? 'no retrieval yet' : `${Math.round((graft / total) * 100)}% graft`;
   const lines = [
-    `graft stats — session ${s.id}`,
+    `inarch stats — session ${s.id}`,
     `  graft reads:   ${graft}`,
     `  source reads:  ${source}   (Read / Grep / Glob)`,
     `  mix:           ${mix}`,

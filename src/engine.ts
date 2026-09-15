@@ -45,7 +45,7 @@ export interface GraphRunOptions {
   concurrency?: number;
   /** Replay unchanged files from the extraction cache (default true). */
   reuse?: boolean;
-  /** Opt-in compiler-grade LSP edge enrichment (`graft build --lsp`). */
+  /** Opt-in compiler-grade LSP edge enrichment (`inarch build --lsp`). */
   lsp?: boolean;
   /** Repo-relative directory prefixes to limit the build to (`--only-dir`). */
   onlyDirs?: string[];

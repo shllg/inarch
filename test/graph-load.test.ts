@@ -1,7 +1,7 @@
 /**
  * Tests for the mtime-keyed loader cache (`src/graph/load.ts`) that sits in
  * front of `readGraph`/`readAskIndex` so a long-lived process (the MCP server;
- * `graft ask` invoked repeatedly in one process) doesn't re-parse the wiring
+ * `inarch ask` invoked repeatedly in one process) doesn't re-parse the wiring
  * graph and ask sidecar on every query.
  */
 import { test } from "node:test";
@@ -141,7 +141,7 @@ test("callTool: graft_trace_calls on the same dir twice doesn't reparse the grap
   } as GraphV1;
   // graft_trace_calls reads through `contextDirFor(root)`, i.e. `<root>/graft`
   // by default — write the graph there directly rather than round-tripping
-  // through a real `graft build`.
+  // through a real `inarch build`.
   const outDir = join(dir, "graft");
   mkdirSync(outDir, { recursive: true });
   writeGraph(graph, outDir);

@@ -71,8 +71,8 @@ export interface ExtractCache {
  *
  * The stamp is in the *filename*, not just inside the file, so two grafts working
  * on one repo keep separate memos instead of evicting each other. That is the
- * default install, not an exotic case: `graft init` wires the MCP server as
- * `npx -y @nanonets/graft` (which resolves the latest published version) while the
+ * default install, not an exotic case: `inarch init` wires the MCP server as
+ * `npx -y inarch` (which resolves the latest published version) while the
  * Claude Code hooks run the locally installed one. The moment those two versions
  * differ, a single shared file means the prompt hook and every MCP retrieval take
  * turns rejecting each other's entries and cold-re-parsing the whole repo — the memo

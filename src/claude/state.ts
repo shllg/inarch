@@ -85,7 +85,7 @@ export function sessionDir(d: string): string { return join(cacheDir(d), 'sessio
 function sessionPath(d: string, id: string): string { return join(sessionDir(d), `${id}.json`); }
 
 /** Every session id with a file on disk, or `[]` when none exist (never throws).
- *  Shared by the statusline and `graft stats` so they agree on the set. */
+ *  Shared by the statusline and `inarch stats` so they agree on the set. */
 export function listSessionIds(d: string): string[] {
   try {
     return readdirSync(sessionDir(d)).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));

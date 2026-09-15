@@ -54,7 +54,7 @@ export interface Impacted {
  * Where a cluster's label came from — the rungs of the naming ladder.
  *
  * `concept` — a concept node from a `--deep` build claims every file in the cluster.
- * `named`   — `graft blast --name` asked a model to name this cluster (see name.ts).
+ * `named`   — `inarch blast --name` asked a model to name this cluster (see name.ts).
  * `symbol`  — the deterministic backstop: the cluster's most significant symbol.
  *
  * A bare directory is never a label. The whole point of the picture is that a

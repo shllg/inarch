@@ -1,8 +1,8 @@
 /**
- * Core tests for `graft grep` (src/search/grep.ts).
+ * Core tests for `inarch grep` (src/search/grep.ts).
  *
  * `heavyRarelyRepo()` builds a small real fixture repo (same `builtRepo`
- * pattern as test/mcp-tools.test.ts) and runs the actual `graft build` CLI,
+ * pattern as test/mcp-tools.test.ts) and runs the actual `inarch build` CLI,
  * so inDegree/innermost-symbol attribution are exercised against a genuine
  * parsed graph, not a hand-rolled one. The narrower fixed/maxHits/zero-hit
  * assertions use a hand-built GraphV1 (just enough for grepGraph's file-node

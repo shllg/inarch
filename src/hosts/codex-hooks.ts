@@ -26,7 +26,7 @@ export function hookTargets(home: string): PlannedWrite[] {
   return [
     {
       hostId: 'agents', id: 'codex-hook-shim',
-      path: join(base, 'hooks', 'graft', 'graft-hooks.cjs'),
+      path: join(base, 'hooks', 'inarch', 'graft-hooks.cjs'),
       scope: 'global', kind: 'hook', what: 'post-edit hook shim',
     },
     {

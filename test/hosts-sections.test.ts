@@ -9,11 +9,11 @@ function fresh(): string { return mkdtempSync(join(tmpdir(), 'graft-sections-'))
 
 test('creates the file with a fenced block when missing', () => {
   const f = join(fresh(), 'AGENTS.md');
-  const r = upsertSection(f, '## Graft\nuse graft ask');
+  const r = upsertSection(f, '## Graft\nuse inarch ask');
   assert.equal(r.action, 'created');
   const text = readFileSync(f, 'utf8');
   assert.ok(text.includes('<!-- graft:start -->'));
-  assert.ok(text.includes('use graft ask'));
+  assert.ok(text.includes('use inarch ask'));
   assert.ok(text.endsWith('\n'));
 });
 

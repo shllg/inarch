@@ -146,7 +146,7 @@ test("a rebuild already in flight is waited out, then reported — never a hang"
 
 /**
  * The gate must leave `stats.json` completely alone, and this is load-bearing rather
- * than merely tidy. `handleStop` only spawns the end-of-turn `graft build` when
+ * than merely tidy. `handleStop` only spawns the end-of-turn `inarch build` when
  * `stats.dirty` is set. A refresh writes the graph but deliberately not the markdown
  * projections, so if it cleared `dirty` — which is exactly what "flip the statusline
  * to ✓ synced mid-turn" would mean — the one thing that rebuilds `graft/`'s cards
@@ -312,7 +312,7 @@ test("an unwritable cache costs reuse, not correctness", async (t) => {
 /**
  * The query path writes the graph, the ask sidecar and the fingerprint — and stops.
  * Cards and INDEX.md are what a human reads and what the agent greps; they are
- * rebuilt by an explicit `graft build`, which is what the `Stop` hook runs at the
+ * rebuilt by an explicit `inarch build`, which is what the `Stop` hook runs at the
  * end of a turn. Keeping them off the query path is what makes a refresh cheap, and
  * it means a read-only card or an unparseable hand-written concept node can never be
  * reached — let alone made permanent — by a retrieval call.
@@ -444,7 +444,7 @@ test("a process killed while holding the lock releases it", async (t) => {
   const lock = join(cache, ".sync.lock");
 
   // `execFileSync(..., { timeout })` — which is how the Claude Code prompt hook runs
-  // `graft ask` — enforces its timeout with SIGTERM, and node's default disposition
+  // `inarch ask` — enforces its timeout with SIGTERM, and node's default disposition
   // for that is to exit without unwinding. So the `finally` that releases the lock
   // never ran, and the abandoned lock then blocked the background sync and made every
   // query wait-then-answer-stale until it aged out.

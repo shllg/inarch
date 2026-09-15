@@ -4,7 +4,7 @@
  * Python spells construction as an ordinary call — `Widget()`, with no `new` to
  * mark it — so a constructor edge reaches the resolver indistinguishable from a
  * function call. Resolved against the function-only index it vanishes, and
- * `graft callers <SomeClass>` reports "no indexed callers" on a class every file
+ * `inarch callers <SomeClass>` reports "no indexed callers" on a class every file
  * in the repo instantiates. That is the same failure `graph-java.test.ts` pins
  * for `new Foo()`, in the language where it is invisible.
  *

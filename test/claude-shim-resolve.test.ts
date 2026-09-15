@@ -3,8 +3,8 @@
  *
  * This is the regression test for the "installed graft once, still on the old
  * version" report: the shim used to take the FIRST candidate that existed, and
- * the first candidate is the absolute path baked in at `graft init` time. So
- * `npm i -g @nanonets/graft@latest` upgraded a directory the shim never looked
+ * the first candidate is the absolute path baked in at `inarch init` time. So
+ * `npm i -g inarch@latest` upgraded a directory the shim never looked
  * at, and the user's hooks kept loading whatever version wired the repo. The
  * shim now takes the highest-versioned candidate instead.
  */
@@ -16,12 +16,12 @@ import { spawnSync } from 'node:child_process';
 import { hooksShim } from '../src/claude/shim-template.js';
 import { tmpRepo } from './helpers.js';
 
-/** A fake installed @nanonets/graft whose hooks entry records that it ran. */
+/** A fake installed inarch whose hooks entry records that it ran. */
 function fakeInstall(root: string, name: string, version: string): string {
   const pkg = join(root, name);
   const distClaude = join(pkg, 'dist', 'claude');
   mkdirSync(distClaude, { recursive: true });
-  writeFileSync(join(pkg, 'package.json'), JSON.stringify({ name: '@nanonets/graft', version }));
+  writeFileSync(join(pkg, 'package.json'), JSON.stringify({ name: 'inarch', version }));
   // CJS on purpose: no "type" field, so `import()` hands back module.exports and
   // `m.main(...)` resolves — same shape the real dist has for the shim's call.
   writeFileSync(
@@ -48,8 +48,8 @@ function runShim(root: string, bakedDir: string, projectDir: string): string | n
 test('an upgraded global install wins over the stale baked path', () => {
   const root = tmpRepo('shim-upgrade');
   const stale = fakeInstall(root, 'old-node-install', '0.9.1');
-  fakeInstall(join(root, 'project', 'node_modules', '@nanonets'), 'graft', '0.11.0');
-  // BAKED points at the install that `graft init` ran from — still on disk (an
+  fakeInstall(join(root, 'project', 'node_modules'), 'inarch', '0.11.0');
+  // BAKED points at the install that `inarch init` ran from — still on disk (an
   // nvm switch leaves it there), still first in the candidate list, now stale.
   assert.equal(runShim(root, stale, join(root, 'project')), '0.11.0');
 });
@@ -57,7 +57,7 @@ test('an upgraded global install wins over the stale baked path', () => {
 test('the baked path still wins when it is the newest', () => {
   const root = tmpRepo('shim-baked-newest');
   const baked = fakeInstall(root, 'current', '0.11.0');
-  fakeInstall(join(root, 'project', 'node_modules', '@nanonets'), 'graft', '0.9.1');
+  fakeInstall(join(root, 'project', 'node_modules'), 'inarch', '0.9.1');
   assert.equal(runShim(root, baked, join(root, 'project')), '0.11.0');
 });
 
@@ -72,7 +72,7 @@ test('an install with an unreadable version loses to a known one', () => {
   const root = tmpRepo('shim-noversion');
   const broken = fakeInstall(root, 'broken', '0.0.0');
   writeFileSync(join(root, 'broken', 'package.json'), 'not json');
-  fakeInstall(join(root, 'project', 'node_modules', '@nanonets'), 'graft', '0.9.1');
+  fakeInstall(join(root, 'project', 'node_modules'), 'inarch', '0.9.1');
   assert.equal(runShim(root, broken, join(root, 'project')), '0.9.1');
 });
 

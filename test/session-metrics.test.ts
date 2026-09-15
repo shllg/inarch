@@ -37,9 +37,9 @@ const CASES: Array<{ name: string; command?: string; want: 'graft' | 'source' | 
   { name: 'Glob', want: 'source' },
   { name: 'Search', want: 'source' },
   // shell running the graft CLI → graft
-  { name: 'Bash', command: 'graft ask "how does auth work"', want: 'graft' },
-  { name: 'Shell', command: 'graft map', want: 'graft' },
-  { name: 'Shell', command: 'npx -y @nanonets/graft callers foo', want: 'graft' },
+  { name: 'Bash', command: 'inarch ask "how does auth work"', want: 'graft' },
+  { name: 'Shell', command: 'inarch map', want: 'graft' },
+  { name: 'Shell', command: 'npx -y inarch callers foo', want: 'graft' },
   { name: 'Bash', command: 'node dist/cli.js grep bar', want: 'graft' },
   // shell running something else → neither
   { name: 'Bash', command: 'ls -la', want: null },
@@ -86,8 +86,8 @@ test('isMcpToolName recognises the server-prefixed shapes', () => {
 });
 
 test('commandInvokesGraft is anchored — not fooled by a substring path', () => {
-  assert.ok(commandInvokesGraft('graft ask x'));
-  assert.ok(commandInvokesGraft('cd repo && graft map'));
+  assert.ok(commandInvokesGraft('inarch ask x'));
+  assert.ok(commandInvokesGraft('cd repo && inarch map'));
   assert.ok(!commandInvokesGraft('cat mygraft.txt'));
   assert.ok(!commandInvokesGraft('echo upgraft'));
 });
@@ -144,7 +144,7 @@ test('recordToolUse stamps the host once — the first tool use owns the attribu
   assert.equal(readSession(d, 's1').host, 'cursor', 'host is not re-stamped');
 });
 
-// ── latestSession + formatSessionStats (what `graft stats` reads) ──────────
+// ── latestSession + formatSessionStats (what `inarch stats` reads) ──────────
 
 function writeSession(d: string, id: string, body: object, ageMs = 0): void {
   const dir = join(d, 'graft', '.cache', 'session');

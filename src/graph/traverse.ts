@@ -1,5 +1,5 @@
 /**
- * Pure graph-traversal core shared by `graft callers` (its `--direction`/
+ * Pure graph-traversal core shared by `inarch callers` (its `--direction`/
  * `--depth` flags), the MCP `graft_trace_calls` tool, and `ask`'s structural
  * intent path.
  *
@@ -238,7 +238,7 @@ export function impactOfFile(graph: GraphV1, fileNode: NodeV1, maxDepth = 2, dir
 }
 
 /**
- * The single entry point behind `graft callers` and the MCP `graft_trace_calls`
+ * The single entry point behind `inarch callers` and the MCP `graft_trace_calls`
  * tool, covering all of what were once three commands:
  *   - `direction:in,  depth:1`  → callers      (who calls/references this)
  *   - `direction:out, depth:1`  → callees      (what this calls/references)
@@ -246,7 +246,7 @@ export function impactOfFile(graph: GraphV1, fileNode: NodeV1, maxDepth = 2, dir
  *   - `direction:out, depth>1`  → transitive dependencies
  *
  * Depth 1 uses the plain single-hop scan ({@link callersOf}/{@link calleesOf})
- * so `graft callers <symbol>` output is unchanged. Depth >1 runs the BFS, and
+ * so `inarch callers <symbol>` output is unchanged. Depth >1 runs the BFS, and
  * for a `kind: 'file'` seed aggregates over the symbols the file defines (see
  * {@link impactOfMany}) so file-level dependents aren't silently dropped.
  */

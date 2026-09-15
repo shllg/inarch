@@ -17,7 +17,7 @@
  * has on itself. They are returned separately so a caller (or a recursion-free test
  * fixture) can assert on them explicitly.
  *
- * Pure and dependency-free so it can run in a test, in `graft check`, or over a
+ * Pure and dependency-free so it can run in a test, in `inarch check`, or over a
  * `wiring.json` read straight off disk. `scripts/graph-quality.mjs` keeps its own
  * standalone copy on purpose, so the CLI report still works when `dist/` is stale.
  */

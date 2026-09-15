@@ -3,7 +3,7 @@
  *
  * `graft/` is a local cache, so it is gitignored, so `git worktree add` never checks
  * it out: a worktree starts with `src/` and `.claude/` and no graph at all. Every
- * MCP tool then answers "no graph found — run graft build first" for the whole
+ * MCP tool then answers "no graph found — run inarch build first" for the whole
  * session, and the passive surface (`INDEX.md`, the cards) is missing too. The agent
  * that was supposed to be cheapest in a fresh worktree is instead blind in one.
  *
@@ -128,7 +128,7 @@ const NOT_SEEDED: SeedResult = { seeded: false };
  * **Deliberately absent: the cards and `INDEX.md`.** They would land as this
  * checkout's documentation while describing the *parent's* branch, and nothing on the
  * query path rewrites them (`writeCards`/`writeIndex` sit behind `!graphOnly`), so they
- * would stay wrong indefinitely. An explicit `graft build` regenerates them from this
+ * would stay wrong indefinitely. An explicit `inarch build` regenerates them from this
  * checkout's own graph — and prunes the ones that no longer apply — which is both
  * correct and nearly free once the graph is here.
  *

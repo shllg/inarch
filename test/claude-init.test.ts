@@ -27,24 +27,24 @@ test('runInit scaffolds settings + both shims + the skill (build skipped)', () =
   assert.ok(existsSync(join(d, '.claude', 'settings.json')));
   assert.ok(existsSync(join(d, '.claude', 'helpers', 'graft-statusline.cjs')));
   assert.ok(existsSync(join(d, '.claude', 'helpers', 'graft-hooks.cjs')));
-  const skillPath = join(d, '.claude', 'skills', 'graft', 'SKILL.md');
+  const skillPath = join(d, '.claude', 'skills', 'inarch', 'SKILL.md');
   assert.ok(existsSync(skillPath), 'writes the graft skill');
   assert.equal(r.skill, skillPath);
-  assert.match(readFileSync(skillPath, 'utf8'), /name: graft/);
+  assert.match(readFileSync(skillPath, 'utf8'), /name: inarch/);
   assert.equal(r.built, false);
   const s = JSON.parse(readFileSync(join(d, '.claude', 'settings.json'), 'utf8'));
   assert.ok(s.statusLine.command.includes('graft-statusline.cjs'));
   assert.ok(s.hooks.Stop[0].hooks[0].command.includes('graft-hooks.cjs'));
-  assert.deepEqual(s.permissions.allow, ['Bash(graft:*)', 'Bash(npx graft:*)', 'Bash(graft-dev:*)', 'Bash(node dist/cli.js:*)']);
+  assert.deepEqual(s.permissions.allow, ['Bash(inarch:*)', 'Bash(npx inarch:*)', 'Bash(inarch-dev:*)', 'Bash(node dist/cli.js:*)']);
 });
 
 test('runInit overwrites a stale skill file', () => {
   const d = fresh();
-  const skillPath = join(d, '.claude', 'skills', 'graft', 'SKILL.md');
-  mkdirSync(join(d, '.claude', 'skills', 'graft'), { recursive: true });
+  const skillPath = join(d, '.claude', 'skills', 'inarch', 'SKILL.md');
+  mkdirSync(join(d, '.claude', 'skills', 'inarch'), { recursive: true });
   writeFileSync(skillPath, 'stale junk');
   runInit(d, { build: false, home: fresh() });
-  assert.match(readFileSync(skillPath, 'utf8'), /name: graft/);
+  assert.match(readFileSync(skillPath, 'utf8'), /name: inarch/);
 });
 
 test('runInit preserves foreign settings and warns on foreign statusLine', () => {
@@ -101,7 +101,7 @@ test('runInit is idempotent', () => {
   runInit(d, { build: false, home: fresh() });
   const s = JSON.parse(readFileSync(join(d, '.claude', 'settings.json'), 'utf8'));
   assert.equal(s.hooks.PostToolUse.length, 2); // post-edit + tool-savings, not duplicated on re-init
-  assert.deepEqual(s.permissions.allow, ['Bash(graft:*)', 'Bash(npx graft:*)', 'Bash(graft-dev:*)', 'Bash(node dist/cli.js:*)']);
+  assert.deepEqual(s.permissions.allow, ['Bash(inarch:*)', 'Bash(npx inarch:*)', 'Bash(inarch-dev:*)', 'Bash(node dist/cli.js:*)']);
 });
 
 test('runInit appends the allowlist to a pre-existing permissions block, preserving unrelated entries', () => {
@@ -110,13 +110,13 @@ test('runInit appends the allowlist to a pre-existing permissions block, preserv
   writeFileSync(join(d, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(ls)'] } }));
   runInit(d, { build: false, home: fresh() });
   const s = JSON.parse(readFileSync(join(d, '.claude', 'settings.json'), 'utf8'));
-  assert.deepEqual(s.permissions.allow, ['Bash(ls)', 'Bash(graft:*)', 'Bash(npx graft:*)', 'Bash(graft-dev:*)', 'Bash(node dist/cli.js:*)']);
+  assert.deepEqual(s.permissions.allow, ['Bash(ls)', 'Bash(inarch:*)', 'Bash(npx inarch:*)', 'Bash(inarch-dev:*)', 'Bash(node dist/cli.js:*)']);
 });
 
 test('postinstall prints the nudge in a fresh dir', () => {
   const d = fresh();
   const out = runPostinstall({ INIT_CWD: d, CI: '' });
-  assert.match(out, /npx graft init/);
+  assert.match(out, /npx inarch init/);
 });
 
 test('postinstall is silent when already initialized', () => {
@@ -133,12 +133,12 @@ test('postinstall is silent under CI', () => {
 
 test('formatInitEpilogue: graph built shows stats, wordmark, and the 3-step list', () => {
   const out = formatInitEpilogue({ graphBuilt: true, nodes: 6398, edges: 10912 });
-  assert.match(out, /\|___\/\s*$/m);
+  assert.match(out, /\|_\| \|_\|\s/m);
   assert.ok(out.includes('6,398 nodes · 10,912 edges'));
   assert.ok(out.includes('1. restart your agent'));
   assert.ok(out.includes('2. code as usual'));
   assert.ok(out.includes('3. explore by hand'));
-  assert.ok(out.includes('graft ask'));
+  assert.ok(out.includes('inarch ask'));
   assert.ok(!out.includes('build the graph'));
   assert.ok(!out.includes('OPENROUTER'));
   // graft/ is git-ignored now — the shareable artifact is .claude (wiring), not the graph.
@@ -160,7 +160,7 @@ test('formatInitEpilogue: graph not built shows "build the graph" as step 1, no 
   assert.equal(col(built, 'restart your agent'), col(notBuilt, 'restart your agent'));
 });
 
-test('CLI: graft init epilogue has the wordmark + next steps, and never mentions OPENROUTER', () => {
+test('CLI: inarch init epilogue has the wordmark + next steps, and never mentions OPENROUTER', () => {
   const d = fresh();
   const res = spawnSync(
     process.execPath,
@@ -168,11 +168,11 @@ test('CLI: graft init epilogue has the wordmark + next steps, and never mentions
     { encoding: 'utf8' },
   );
   assert.equal(res.status, 0, res.stderr);
-  assert.ok(res.stderr.includes('|___/'), 'wordmark present');
+  assert.ok(res.stderr.includes('|_| |_|'), 'wordmark present');
   assert.ok(res.stderr.includes('code as usual'));
   assert.ok(res.stderr.includes('restart your agent'));
   assert.ok(res.stderr.includes('git add .claude'));
-  assert.ok(res.stderr.includes('graft ask'));
+  assert.ok(res.stderr.includes('inarch ask'));
   assert.ok(!res.stderr.includes('OPENROUTER'));
   // --no-build, never built before → "build the graph" is step 1
   assert.ok(res.stderr.includes('1. build the graph'));

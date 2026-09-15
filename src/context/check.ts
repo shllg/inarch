@@ -4,7 +4,7 @@
  * Pure I/O + hashing: no LLM, no network, milliseconds. It re-hashes the source
  * files the manifest recorded and compares. Meant to run in CI: exit 0 when the
  * graph is fresh, 1 when it has drifted (so a PR that changed code but not the
- * graph fails until `graft build --deep` is re-run and committed).
+ * graph fails until `inarch build --deep` is re-run and committed).
  *
  * Drift categories:
  *   content     a recorded source file's bytes changed
@@ -147,18 +147,18 @@ export function staleBanner(f: FreshnessResult | null): string | null {
   return (
     `⚠ graft's index may be ahead of your working tree: ${f.missing} of ${f.total} indexed ` +
     `files are not on disk (branch switch or uncommitted move?). If graft names a path that ` +
-    `isn't there, don't chase it — \`graft grep\` the symbol to find where it lives now; run \`graft build\` to refresh.`
+    `isn't there, don't chase it — \`inarch grep\` the symbol to find where it lives now; run \`inarch build\` to refresh.`
   );
 }
 
 /** Render a check result as a human-readable report. */
 export function formatCheckReport(r: CheckResult): string {
   if (r.missing) {
-    return "graft check: NO GRAPH\n\nNo graft/manifest.json found. Run `graft build --deep` first.";
+    return "inarch check: NO GRAPH\n\nNo graft/manifest.json found. Run `inarch build --deep` first.";
   }
-  if (r.ok) return "graft check: OK — the graph is in sync with the code.";
+  if (r.ok) return "inarch check: OK — the graph is in sync with the code.";
 
-  const lines: string[] = ["graft check: STALE", ""];
+  const lines: string[] = ["inarch check: STALE", ""];
   if (r.contentDrift.length) {
     lines.push(`changed (${r.contentDrift.length}):`);
     for (const c of r.contentDrift) lines.push(`  ~ ${c.path}  (${c.from} → ${c.to})`);
@@ -175,7 +175,7 @@ export function formatCheckReport(r: CheckResult): string {
     lines.push(`index mismatch (${r.indexDrift.length}):`);
     for (const s of r.indexDrift) lines.push(`  ! ${s}`);
   }
-  lines.push("", "Run `graft build --deep` to regenerate, then commit graft/.");
+  lines.push("", "Run `inarch build --deep` to regenerate, then commit graft/.");
   return lines.join("\n");
 }
 

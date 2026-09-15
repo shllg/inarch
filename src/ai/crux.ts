@@ -153,7 +153,7 @@ function parseResults(obj: { symbols?: unknown } | undefined): NodeCrux[] {
  * Some OpenAI-compatible gateways ignore forced `tool_choice` and put the tool
  * payload in `content` instead (plain `{symbols:…}`, fenced JSON, or an emulated
  * `[{name, parameters}]` array). Without this recovery the meaning pass sees an
- * empty `toolCalls` list, leaves every node `pending`, and `graft check` loops
+ * empty `toolCalls` list, leaves every node `pending`, and `inarch check` loops
  * on "run --deep" forever (#172; same trigger as #129 for the crux path).
  */
 function argsFromResponse(res: { text: string; toolCalls: { name: string; args: unknown }[] }): {

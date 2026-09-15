@@ -1,5 +1,5 @@
 /**
- * `graft viz --export <dir>`: the same viewer, as one self-contained HTML file.
+ * `inarch viz --export <dir>`: the same viewer, as one self-contained HTML file.
  *
  * This exists so a PR comment has somewhere real to point. A Mermaid diagram in a
  * comment can hold about five circles before it stops being readable, and it can
@@ -29,7 +29,7 @@ export interface VizExportOptions {
   subtitle?: string;
   /**
    * Context graph to inline instead of assembling one from the deep tier's concept
-   * files. `graft blast --export-viz` passes the blast radius itself, which is how a
+   * files. `inarch blast --export-viz` passes the blast radius itself, which is how a
    * PR gets a Context tab worth opening without a `--deep` build.
    */
   contextGraph?: VizGraph;

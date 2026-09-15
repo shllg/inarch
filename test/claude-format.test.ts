@@ -8,16 +8,16 @@ const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
 test('not-built state', () => {
   const lines = renderStatusline(null, null, { ctxPct: null });
   assert.match(strip(lines[0]), /not built/);
-  assert.match(strip(lines[0]), /graft build/);
+  assert.match(strip(lines[0]), /inarch build/);
 });
 
 test('empty graph (0 nodes) is built, not "not built"', () => {
-  // A successful `graft build` on a docs-only repo writes a real graph with
+  // A successful `inarch build` on a docs-only repo writes a real graph with
   // zero symbols. nodeCount === 0 must not be treated as "never built".
   const stats = { ...emptyStats(), nodeCount: 0, edgeCount: 0 };
   const line = strip(renderStatusline(stats, null, { ctxPct: null })[0]);
   assert.doesNotMatch(line, /not built/);
-  assert.doesNotMatch(line, /graft build/);
+  assert.doesNotMatch(line, /inarch build/);
   assert.match(line, /0 nodes \/ 0 edges/);
   assert.match(line, /✓ synced/);
 });
@@ -26,7 +26,7 @@ test('two-line bar: size + freshness + ctx + last', () => {
   const stats = { ...emptyStats(), nodeCount: 319, edgeCount: 730, totalCount: 319, readyCount: 0,
     dirty: true, staleCount: 4, lastFile: 'pkce.ts' };
   const lines = renderStatusline(stats, null, { ctxPct: 34 }).map(strip);
-  assert.match(lines[0], /graft/);
+  assert.match(lines[0], /inarch/);
   assert.match(lines[0], /319 nodes \/ 730 edges/);
   assert.doesNotMatch(lines[0], /enriched/); // enriched segment removed from the bar
   assert.match(lines[0], /⚠ 4 stale/);
@@ -118,7 +118,7 @@ test('relevantRetrieval nudges instead of injecting when the match is weak both 
   const s = freshSession();
   const txt = relevantRetrieval(gateAsk({ coverage: 0.2, coverageStrong: 0.05 }), s);
   assert.match(txt ?? '', /no strong match/, 'a weak pack is replaced by a named command');
-  assert.match(txt ?? '', /graft ask/, 'the nudge names the command to run');
+  assert.match(txt ?? '', /inarch ask/, 'the nudge names the command to run');
   assert.deepEqual(s.injectedPointers, [], 'nothing recorded — no pack was shown');
 });
 
@@ -185,10 +185,10 @@ test('formatOrientation labels and truncates to budget', () => {
   // deliberate slack so teaching the directive one more thing (dollar values,
   // 0.7.x) doesn't fail a test that is watching something else.
   assert.ok(out.length < 4000, 'index trimmed to budget; only the fixed directive adds to it');
-  // Regression: `graft impact` was folded into `graft callers --depth` in 0.6.0 —
+  // Regression: `graft impact` was folded into `inarch callers --depth` in 0.6.0 —
   // the always-on directive must teach the current command, not a dead one.
   assert.doesNotMatch(out, /graft impact\b/, 'does not teach the removed `graft impact` command');
-  assert.match(out, /graft callers .*--depth/, 'teaches blast radius via callers --depth instead');
+  assert.match(out, /inarch callers .*--depth/, 'teaches blast radius via callers --depth instead');
 });
 
 test('formatOrientation prepends a staleness banner when one is supplied', () => {

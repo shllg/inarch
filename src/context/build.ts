@@ -70,7 +70,7 @@ export interface BuildOptions {
   model: string;
   summarizer: Summarizer;
   synthesizer: Synthesizer;
-  /** Files summarized in parallel during phase 1. Default 8. Raised via `graft build -j`. */
+  /** Files summarized in parallel during phase 1. Default 8. Raised via `inarch build -j`. */
   concurrency?: number;
   onProgress?: (info: BuildProgress) => void;
 }

@@ -8,7 +8,7 @@
  * host in the registry and `mcp-config.ts` respectively.
  *
  * `antigravitySkillTargets()` is the pure "which files would this touch" half (for
- * `graft init --dry-run` / the picker); `installAntigravitySkill()` does the write.
+ * `inarch init --dry-run` / the picker); `installAntigravitySkill()` does the write.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -18,7 +18,7 @@ import type { ConfigWrite } from './config-write.js';
 
 /** The skill file path, under the user's global Antigravity skills dir. */
 function skillPath(home: string): string {
-  return join(home, '.gemini', 'skills', 'graft', 'SKILL.md');
+  return join(home, '.gemini', 'skills', 'inarch', 'SKILL.md');
 }
 
 /** The files installing Antigravity's global skill would touch — pure, no writes. */
@@ -32,7 +32,7 @@ export function antigravitySkillTargets(home: string): PlannedWrite[] {
   ];
 }
 
-/** Write graft's skill into `~/.gemini/skills/graft/SKILL.md`, idempotently. */
+/** Write inarch's skill into `~/.gemini/skills/inarch/SKILL.md`, idempotently. */
 export function installAntigravitySkill(home: string): ConfigWrite[] {
   const path = skillPath(home);
   const content = skillTemplate();

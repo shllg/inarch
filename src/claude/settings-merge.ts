@@ -3,18 +3,18 @@ import { isGraftEntry } from '../hosts/config-write.js';
 type Json = Record<string, any>;
 
 const SL_CMD = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs"';
-/** Stable marker for "this statusLine is Graft's", not the full command string —
+/** Stable marker for "this statusLine is ours", not the full command string —
  * an older shim path or a GRAFT_DIR wrapper still names this file. */
 const GRAFT_STATUSLINE_HELPER = 'graft-statusline.cjs';
 const FOOTER = 'graft/[\\w./-]+\\.md';
-// Every form graft is actually invoked as. 'graft:*' covers a global install;
-// the other two cover a repo working on graft itself (or any consumer running it
+// Every form inarch is actually invoked as. 'inarch:*' covers a global install;
+// the other two cover a repo working on inarch itself (or any consumer running it
 // from a checkout), where the binary is not on PATH under that name. A retrieval
 // call that raises a permission prompt loses to grep, which never does.
 const ALLOW_ENTRIES = [
-  'Bash(graft:*)',
-  'Bash(npx graft:*)',
-  'Bash(graft-dev:*)',
+  'Bash(inarch:*)',
+  'Bash(npx inarch:*)',
+  'Bash(inarch-dev:*)',
   'Bash(node dist/cli.js:*)',
 ];
 
@@ -25,7 +25,7 @@ const REPO_HELPERS = '${CLAUDE_PROJECT_DIR:-.}/.claude/helpers';
  * `helpers` is the directory holding `graft-hooks.cjs`, and it is a parameter for
  * one reason: the user-level install (see hosts/claude-global.ts) has to name an
  * absolute path. A `${CLAUDE_PROJECT_DIR}` command works only where a previous
- * `graft init` wrote a shim into that project — which is exactly the case the
+ * `inarch init` wrote a shim into that project — which is exactly the case the
  * global copy exists to cover, so it cannot reuse the repo form.
  */
 function hookCmd(arg: string, helpers: string = REPO_HELPERS): string {
@@ -39,34 +39,38 @@ function graftBlocks(helpers?: string): Record<string, Json[]> {
       // via Bash, or the `graft_*` MCP tools) prints a `[graft] tokens saved ≈ N`
       // footer this hook sums into the session total; the same hook classifies
       // Read/Grep/Glob as source reads vs graft as graft reads, which is what feeds
-      // `graft stats` and the `session_summary` graft-vs-grep ratio. Broad matcher,
+      // `inarch stats` and the `session_summary` graft-vs-grep ratio. Broad matcher,
       // but the handler no-ops instantly unless there is something to record, so an
       // unrelated Bash or a plain Read costs only a stdin read.
       { matcher: 'Bash|mcp__graft__|Read|Grep|Glob', hooks: [{ type: 'command', command: hookCmd('tool-savings', helpers), timeout: 8000 }] },
     ],
-    // Longer budget than the other hooks: its `graft ask` is a real query, and a
+    // Longer budget than the other hooks: its `inarch ask` is a real query, and a
     // query now brings the graph up to date first (graph/refresh.ts) — usually
     // milliseconds, but the first one after an upgrade re-parses the repo once.
     // `hooks.ts` reads this number back out of the installed settings.json at
-    // runtime and caps its `graft ask` child just under it, so a repo wired before
+    // runtime and caps its `inarch ask` child just under it, so a repo wired before
     // this bump (8s) keeps a child that fits inside 8s. Changing the number here is
     // therefore safe on its own — but it only reaches an existing repo when someone
-    // re-runs `graft init`, since that is the only caller of this function.
+    // re-runs `inarch init`, since that is the only caller of this function.
     UserPromptSubmit: [{ hooks: [{ type: 'command', command: hookCmd('prompt', helpers), timeout: 15000 }] }],
     SessionStart: [{ hooks: [{ type: 'command', command: hookCmd('session-start', helpers), timeout: 8000 }] }],
     Stop: [{ hooks: [{ type: 'command', command: hookCmd('stop', helpers), timeout: 8000 }] }],
   };
 }
 /**
- * Is this allowlist entry one graft wrote?
+ * Is this allowlist entry one we wrote?
  *
- * Scoped to the forms graft is actually invoked as — NOT any rule mentioning
- * "graft". A user who allowlists their own `Bash(graft-mytool:*)` keeps it; only
- * graft's own set is replaced, which is what lets a renamed entry disappear on
+ * Scoped to the forms the binary is actually invoked as — NOT any rule mentioning
+ * "inarch". A user who allowlists their own `Bash(inarch-mytool:*)` keeps it; only
+ * our own set is replaced, which is what lets a renamed entry disappear on
  * upgrade instead of accumulating beside its replacement.
+ *
+ * The inherited `graft` spellings stay in the pattern for exactly that reason: a
+ * repo wired before the rename carries them, and matching them here is what
+ * removes them on the next init rather than leaving both sets behind.
  */
 export function isGraftAllowEntry(entry: unknown): boolean {
-  return /^Bash\((?:graft|npx graft|graft-dev|node dist\/cli\.js)(?::|\))/.test(String(entry));
+  return /^Bash\((?:inarch|npx inarch|inarch-dev|graft|npx graft|graft-dev|node dist\/cli\.js)(?::|\))/.test(String(entry));
 }
 
 /** Is this footer regex graft's? It points at the card tree, which is graft's alone. */
@@ -121,7 +125,7 @@ export function mergeGraftSettings(
 
   applyStatusline(
     merged, 'statusLine', warnings, wanted,
-    'Existing statusLine left untouched (a session allows only one). To use Graft, point it at .claude/helpers/graft-statusline.cjs.',
+    'Existing statusLine left untouched (a session allows only one). To use Inarch, point it at .claude/helpers/graft-statusline.cjs.',
   );
   applyStatusline(
     merged, 'subagentStatusLine', warnings, wanted,
@@ -141,7 +145,7 @@ export function mergeGraftSettings(
   merged.footerLinksRegexes = [...priorFooter.filter((r: unknown) => !isGraftFooterRegex(r)), FOOTER];
 
   // headless/subagent runs hard-deny Bash by default; without an allowlist entry
-  // `graft ask`'s own Bash calls (and the skill it installs) can't run out-of-box.
+  // `inarch ask`'s own Bash calls (and the skill it installs) can't run out-of-box.
   // Same shape as the hooks merge above: drop graft's prior entries, then add the
   // current set. Append-only left a renamed invocation form in the user's settings
   // forever, with nothing able to remove it.
@@ -159,7 +163,7 @@ export function mergeGraftSettings(
  *
  * Hooks only, deliberately. `mergeGraftSettings` also claims the statusline, the
  * footer regex and a Bash allowlist, and each of those is a reasonable thing to
- * accept for a repo you ran `graft init` in and an unreasonable thing to impose on
+ * accept for a repo you ran `inarch init` in and an unreasonable thing to impose on
  * every repo you ever open — a statusline especially, since a session allows exactly
  * one and taking it globally would silently outrank the user's own. The hooks are the
  * piece that has to be global, because they are what a worktree loses.

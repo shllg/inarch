@@ -1,11 +1,11 @@
 /**
- * `graft build --only-dir <path>` end-to-end through the real CLI.
+ * `inarch build --only-dir <path>` end-to-end through the real CLI.
  *
  * The whitelist is the inverse of SKIP_DIRS: when set, ONLY files under the
  * listed repo-relative prefixes are indexed, and everything else (including
  * top-level files) is skipped. It is recorded in the fingerprint — the graph's
  * own freshness sidecar under `graft/` — never in the source repo's
- * `.graft/config.json`, so a limited build leaves no trace under the repo being
+ * `.inarch/config.json`, so a limited build leaves no trace under the repo being
  * indexed. That also keeps the query-path freshness probe honest: the excluded
  * files must not read as phantom "added" drift on every query.
  */
@@ -59,7 +59,7 @@ test("--only-dir limits the walk, records the whitelist in the fingerprint, and 
     // The whitelist lives in the fingerprint, not the source repo's config.
     const fp = readFingerprint(join(d, "graft"));
     assert.deepEqual(fp?.onlyDirs, ["src/a"], "fingerprint must record the whitelist");
-    assert.ok(!existsSync(join(d, ".graft", "config.json")), "source repo config must be untouched");
+    assert.ok(!existsSync(join(d, ".inarch", "config.json")), "source repo config must be untouched");
 
     // The fingerprint probe (the fast path `ensureFreshGraph`/hooks use, which
     // never sees CLI flags) must enumerate the same whitelisted set — so the

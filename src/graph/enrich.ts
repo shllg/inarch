@@ -67,7 +67,7 @@ export interface EnrichStats {
   skippedFiles: number;
   /** Set when the pass gave up early: quota/auth rejection, or a run of
    * provider failures. Content-quality misses (#235) count in `failedFiles` but
-   * do not set this. The reason is what `graft build --deep` exits non-zero with. */
+   * do not set this. The reason is what `inarch build --deep` exits non-zero with. */
   fatal?: string;
 }
 
@@ -270,7 +270,7 @@ async function collectFileCrux(
     }
   }
   // A total miss used to return `{ results: ∅ }` with no error — enrich left
-  // every node `pending`, the CLI exited 0, and `graft check` told the user to
+  // every node `pending`, the CLI exited 0, and `inarch check` told the user to
   // re-run `--deep` forever (#172). Surface it as a failure like a thrown error.
   // Content-quality, not quota: count the file, keep going (#235).
   if (!error && refs.length > 0 && results.size === 0) {

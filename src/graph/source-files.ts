@@ -29,7 +29,7 @@ function normExt(e: string): string {
 
 /**
  * The subset of user-supplied `-e` extensions that no parser claims (depth or breadth).
- * `graft build -e ".vue"` used to accept these silently and index nothing; the CLI warns
+ * `inarch build -e ".vue"` used to accept these silently and index nothing; the CLI warns
  * on whatever this returns so an unsupported extension is never a quiet no-op.
  */
 export function unsupportedExtensions(exts: string[]): string[] {

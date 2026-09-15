@@ -1,7 +1,7 @@
 /**
  * Tests for the `ask` build-time sidecar (`.cache/ask-index.json`).
  *
- * `graft build` writes token/document-frequency bags once so `ask` doesn't
+ * `inarch build` writes token/document-frequency bags once so `ask` doesn't
  * re-tokenize the whole corpus per query. These tests pin down the contract
  * that makes the sidecar safe to ship: it is a byte-for-byte reproduction of
  * live tokenization, consuming it never changes a single `ask` result (hits

@@ -1,5 +1,5 @@
 /**
- * `-e` extension validation (#98): a `graft build -e "<ext>"` must not silently index
+ * `-e` extension validation (#98): a `inarch build -e "<ext>"` must not silently index
  * nothing — the CLI warns on any extension no parser claims. These test the pure helper
  * the warning is built on: the supported set (depth + breadth + container) and which
  * inputs fall outside it, including normalization (leading dot optional, case-insensitive).

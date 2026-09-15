@@ -1,7 +1,7 @@
 /**
  * #127: a `--deep` build whose LLM calls failed used to degrade file by file and
  * still exit 0 — an 884-file run logged 1,617 quota rejections, printed the normal
- * success footer, and left `graft check` saying "in sync".
+ * success footer, and left `inarch check` saying "in sync".
  *
  * Two behaviours are asserted here, both with a fake summarizer (no network):
  *   - the pass STOPS instead of issuing a doomed call per remaining file — on a

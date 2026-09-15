@@ -23,17 +23,17 @@ export function claudeTargets(dir: string): PlannedWrite[] {
     t(join(dir, '.claude', 'settings.json'), 'graft statusline + hook blocks'),
     t(join(dir, '.claude', 'helpers', 'graft-statusline.cjs'), 'statusline shim'),
     t(join(dir, '.claude', 'helpers', 'graft-hooks.cjs'), 'hooks shim'),
-    t(join(dir, '.claude', 'skills', 'graft', 'SKILL.md'), 'graft skill'),
+    t(join(dir, '.claude', 'skills', 'inarch', 'SKILL.md'), 'inarch skill'),
     // Tagged 'mcp' so the picker doesn't label Claude Code as having no MCP.
-    t(join(dir, '.mcp.json'), 'mcpServers.graft', 'mcp'),
+    t(join(dir, '.mcp.json'), 'mcpServers.inarch', 'mcp'),
   ];
 }
 
 /**
  * Build the graph if it isn't there yet. Not Claude-specific: the wiring for any
- * host points at `graft/`, so `graft init` builds whichever hosts were selected —
+ * host points at `graft/`, so `inarch init` builds whichever hosts were selected —
  * this lives beside `runInit` only because that's the caller that owns `built`.
- * Best-effort; the user can always run `graft build` (the epilogue says so).
+ * Best-effort; the user can always run `inarch build` (the epilogue says so).
  */
 export function buildGraphIfMissing(dir: string, opts: { build?: boolean; cliPath?: string }): boolean {
   // `hasGraftIndex`, not just wiring.json: a workspace parent's graph IS its

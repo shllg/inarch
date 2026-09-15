@@ -2738,7 +2738,7 @@ function rubyInlineVisibility(
  * node itself, from the READ two lines further down. Until M3 typed the receiver
  * both were bare-name matches that resolved to nothing, so the difference never
  * surfaced; typed, the writer would have landed squarely on the reader's node and
- * `graft callers user` would have reported every `Current.user = …` in the app as
+ * `inarch callers user` would have reported every `Current.user = …` in the app as
  * a caller of a method it never calls.
  *
  * An operator assignment (`self.count += 1`) really does call both `count` and
@@ -4444,7 +4444,7 @@ function phpExported(node: Parser.SyntaxNode): boolean {
  * objects: the binding does not guarantee that two traversals to the same
  * underlying node hand back the same JS wrapper, so `right === node` can be false
  * even when they are the same node — producing a stray `{closure}` name that
- * makes `graft check` report the graph STALE against its own stored output. */
+ * makes `inarch check` report the graph STALE against its own stored output. */
 function phpClosureName(node: Parser.SyntaxNode): string {
   const parent = node.parent;
   if (parent?.type === "assignment_expression" && parent.childForFieldName("right")?.id === node.id) {

@@ -1,5 +1,5 @@
 /**
- * Scope-aware ranking for `graft ask`. Pure functions, no fs.
+ * Scope-aware ranking for `inarch ask`. Pure functions, no fs.
  *
  * The problem: lexical + graph scores are corpus-relative. In a multi-scope
  * repo (a monorepo's `frontend/` + `backend/`, sub-projects under one root),

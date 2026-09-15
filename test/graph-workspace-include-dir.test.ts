@@ -99,7 +99,7 @@ test("A5: a skipped-name workspace child remains discoverable on a later no-flag
 
     const workspace = JSON.parse(readFileSync(join(parent, "graft", "workspace.json"), "utf8")) as { children: string[] };
     assert.deepEqual(workspace.children, ["app", "build"]);
-    assert.equal(readFileSync(join(parent, ".graft", "config.json"), "utf8").includes("build"), true);
+    assert.equal(readFileSync(join(parent, ".inarch", "config.json"), "utf8").includes("build"), true);
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }

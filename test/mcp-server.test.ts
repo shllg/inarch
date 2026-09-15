@@ -44,7 +44,7 @@ test('initialize → tools/list → tools/call round-trip', async () => {
   const init = rs.find((r) => r.id === 1);
   assert.equal(init.result.protocolVersion, '2025-03-26');
   assert.ok(init.result.capabilities.tools);
-  assert.equal(init.result.serverInfo.name, 'graft');
+  assert.equal(init.result.serverInfo.name, 'inarch');
   // This dir has no graph and no parent checkout, so the server advertises
   // nothing: graft is registered at the user MCP scope now (hosts/claude-global.ts),
   // which starts it in every project the user opens, and six tool schemas charged
@@ -56,7 +56,7 @@ test('initialize → tools/list → tools/call round-trip', async () => {
   // still gets the soft error that names the fix.
   const call = rs.find((r) => r.id === 3);
   assert.equal(call.result.isError, true); // unbuilt repo → soft error content
-  assert.match(call.result.content[0].text, /graft build/);
+  assert.match(call.result.content[0].text, /inarch build/);
 });
 
 const ALL_TOOLS = [

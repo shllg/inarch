@@ -1,5 +1,5 @@
 /**
- * Tests for `graft map`'s pure core: {@link buildRepoMap} + {@link formatRepoMap}.
+ * Tests for `inarch map`'s pure core: {@link buildRepoMap} + {@link formatRepoMap}.
  *
  * All fixtures are hand-built `GraphV1` graphs (no real repo, no `buildGraph`)
  * — same `nodeStub`/`graphOf` pattern as test/graphrank.test.ts, extended

@@ -1,5 +1,5 @@
 /**
- * `graft init`'s agent picker and `--dry-run` plan printer.
+ * `inarch init`'s agent picker and `--dry-run` plan printer.
  *
  * Split three ways so the logic is testable without a TTY: `renderPicker` and
  * `reducePicker` are pure, `runPicker` is the only part that touches stdin.
@@ -182,7 +182,7 @@ export function renderPicker(state: PickerState, tty = true): string {
   // rows carry the '(not detected)' tag or the cursor's colour codes.
   const label = (r: PickerRow) => `${r.label}${r.detected ? '' : ' (not detected)'}`;
   const width = Math.max(...state.rows.map((r) => label(r).length));
-  const lines = ['graft init — select what to wire into this repo:', ''];
+  const lines = ['inarch init — select what to wire into this repo:', ''];
   let ruled = false;
   for (const [i, row] of state.rows.entries()) {
     // One rule between the agents and the settings, so the consent row reads as
@@ -287,16 +287,16 @@ export function formatNonInteractiveHelp(detectedIds: string[]): string {
   const examples: [string, string][] = [
     ...(detectedIds.length > 0
       ? ([
-          [`graft init --agents ${detectedIds.join(" ")}`, "wire these"],
-          ["graft init --yes", "same, without spelling them out"],
+          [`inarch init --agents ${detectedIds.join(" ")}`, "wire these"],
+          ["inarch init --yes", "same, without spelling them out"],
         ] as [string, string][])
       : []),
-    ["graft init --agents claude", "Claude Code only"],
-    ["graft init --dry-run", "list every file first"],
+    ["inarch init --agents claude", "Claude Code only"],
+    ["inarch init --dry-run", "list every file first"],
   ];
   const width = Math.max(...examples.map(([cmd]) => cmd.length));
   return [
-    "graft init: no TTY to prompt on, and no --agents/--yes given — nothing written.",
+    "inarch init: no TTY to prompt on, and no --agents/--yes given — nothing written.",
     `detected: ${list}`,
     "",
     ...examples.map(([cmd, note]) => `  ${cmd.padEnd(width)}   # ${note}`),

@@ -37,10 +37,10 @@ const provenance = { id: "a".repeat(64), digest: "b".repeat(64) };
 
 test("project configuration cannot register executable code", (t) => {
   const f = fixture(t);
-  mkdirSync(join(f.repo, ".graft"));
-  writeFileSync(join(f.repo, ".graft/config.json"), JSON.stringify({ extensions: [f.entry] }));
+  mkdirSync(join(f.repo, ".inarch"));
+  writeFileSync(join(f.repo, ".inarch/config.json"), JSON.stringify({ extensions: [f.entry] }));
   assert.deepEqual(listExtensions(f.repo, { stateDir: f.stateDir }), []);
-  assert.throws(() => approveExtension(f.repo, f.entry, {}, { stateDir: join(f.repo, ".graft") }), /outside|repository/);
+  assert.throws(() => approveExtension(f.repo, f.entry, {}, { stateDir: join(f.repo, ".inarch") }), /outside|repository/);
 });
 
 test("approval covers imported helpers and configuration, with canonical repository identity", (t) => {
@@ -428,7 +428,7 @@ test("build dry-run lists approval without executing code or creating graph, aud
   });
   assert.equal(JSON.parse(result).extensions[0].status, "ready");
   assert.equal(existsSync(out), false);
-  assert.equal(existsSync(join(f.repo, ".graft")), false);
+  assert.equal(existsSync(join(f.repo, ".inarch")), false);
   assert.deepEqual(extensionRuns(f.repo, options), []);
 });
 

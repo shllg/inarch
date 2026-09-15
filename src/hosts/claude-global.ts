@@ -2,7 +2,7 @@
  * User-level install for Claude Code: the copy of graft's wiring that lives
  * outside every repo.
  *
- * Why this exists. Everything `graft init` writes for Claude Code lands *in* the
+ * Why this exists. Everything `inarch init` writes for Claude Code lands *in* the
  * repo — `.mcp.json` and `.claude/settings.json`. A `.gitignore` is free to ignore
  * both, and `git worktree add` checks out tracked files only, so a worktree of such
  * a repo starts with graft's shims present and neither of the two files that *point
@@ -60,7 +60,7 @@ export function claudeGlobalTargets(home: string): PlannedWrite[] {
   return [
     g('claude-global-shim', join(globalHelpersDir(home), 'graft-hooks.cjs'), 'hook', 'hooks shim (user level)'),
     g('claude-global-hooks', join(home, '.claude', 'settings.json'), 'hook', 'SessionStart / UserPromptSubmit / PostToolUse / Stop'),
-    g('claude-global-mcp', join(home, '.claude.json'), 'mcp', 'mcpServers.graft'),
+    g('claude-global-mcp', join(home, '.claude.json'), 'mcp', 'mcpServers.inarch'),
   ];
 }
 
@@ -88,7 +88,7 @@ function upsertGlobalHooks(id: string, path: string, helpers: string): GlobalWri
  * package's `dist/`, exactly as the Codex install does.
  *
  * Best-effort by contract, like every other writer here: a failure is reported as an
- * action, never raised, so a bad `~/.claude.json` can't fail a `graft init`.
+ * action, never raised, so a bad `~/.claude.json` can't fail a `inarch init`.
  */
 export function installClaudeGlobal(home: string): GlobalWrite[] {
   const [shim, settings, mcp] = claudeGlobalTargets(home);

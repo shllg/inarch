@@ -4,7 +4,7 @@
  *
  * The comment can hold about five circles before it stops being readable, and it
  * can never answer the reviewer's next question: which symbols, at which lines,
- * and what did they actually become. `graft viz --export` already produces a
+ * and what did they actually become. `inarch viz --export` already produces a
  * self-contained page, but its Context tab is assembled from the deep tier's
  * concept files, which the PR path deliberately no longer builds — so on a
  * structural build that tab held a single INDEX dot.

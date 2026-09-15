@@ -117,7 +117,7 @@ export function extensionHealth(fingerprint: Fingerprint | null): ExtensionHealt
 
 export function extensionHealthNote(health: ExtensionHealth): string | undefined {
   if (health.ok) return undefined;
-  return `extension coverage incomplete: ${health.issues.map(issue => `${issue.id.slice(0, 12)}: ${issue.reasonCode}`).join(", ")}; verify missing relationships in source${health.retryAt === undefined ? "; run graft build after correcting the extension failure" : "; automatic retry is subject to a cooldown"}`;
+  return `extension coverage incomplete: ${health.issues.map(issue => `${issue.id.slice(0, 12)}: ${issue.reasonCode}`).join(", ")}; verify missing relationships in source${health.retryAt === undefined ? "; run inarch build after correcting the extension failure" : "; automatic retry is subject to a cooldown"}`;
 }
 
 /** What moved since the last build. Empty in all three arrays = nothing to do. */
@@ -207,7 +207,7 @@ export function alwaysHash(): boolean {
  * **The probe's rule only.** `buildGraph` deliberately does not use this: it reads
  * and hashes every file, every time. A stat may decide whether a query bothers
  * rebuilding; it may not decide what the rebuild itself looks at — otherwise
- * `graft check` (which always re-hashes) can report drift that the `graft build` it
+ * `inarch check` (which always re-hashes) can report drift that the `inarch build` it
  * recommends then refuses to repair. `GRAFT_REFRESH=hash` is the escape hatch for
  * the probe's blind spot: a same-length edit inside one mtime tick.
  *

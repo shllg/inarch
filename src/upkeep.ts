@@ -1,7 +1,7 @@
 /**
  * Self-maintenance: keeping the wiring an installed graft wrote current.
  *
- * `graft init` copies hooks, shims, skill text and rule files INTO the repo.
+ * `inarch init` copies hooks, shims, skill text and rule files INTO the repo.
  * Replacing the binary touches none of them, so a repo wired by 0.7 keeps 0.7's
  * prompts and 0.7's hook timeouts forever (see the comment on
  * `promptAskTimeout`, which exists only to work around exactly this). A version
@@ -43,14 +43,14 @@ export function runningVersion(): string {
 /* -------------------------------------------------------------------------- */
 
 /**
- * The subset of `graft init`'s flags a refresh has to replay.
+ * The subset of `inarch init`'s flags a refresh has to replay.
  *
  * Without these, an auto-refresh would install things the user explicitly
- * declined: someone who ran `graft init --no-global` (or `--no-hooks`, or
+ * declined: someone who ran `inarch init --no-global` (or `--no-hooks`, or
  * `--no-statusline`) said "keep out of `~/.codex`" / "leave my statusline
  * alone", and a later session silently writing there would be graft overriding a
  * decision rather than maintaining one. Absent from an older stamp → all true,
- * which is what plain `graft init` does.
+ * which is what plain `inarch init` does.
  */
 export interface WiringOpts {
   /** false → never write outside the repo (`--no-global`). */
@@ -65,13 +65,13 @@ export interface WiringOpts {
 
 export const DEFAULT_WIRING_OPTS: WiringOpts = { global: true, mcp: true, hooks: true, statusline: true };
 
-/** An older stamp has no `opts`; a plain `graft init` wired everything. */
+/** An older stamp has no `opts`; a plain `inarch init` wired everything. */
 export function wiringOpts(stamp: WiringStamp | null): WiringOpts {
   return { ...DEFAULT_WIRING_OPTS, ...(stamp?.opts ?? {}) };
 }
 
 export interface WiringStamp {
-  /** The graft version whose `init` wrote this repo's agent files. */
+  /** The inarch version whose `init` wrote this repo's agent files. */
   version: string;
   /** Host ids that were wired, so a refresh re-writes exactly those and never
    * silently adopts an agent the user declined in the picker. */

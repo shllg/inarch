@@ -1,7 +1,7 @@
 /**
  * Workspace `init` fan-out + the subdirectory root walk, end to end.
  *
- * The gap both close: with two sibling repos under one parent, `graft init
+ * The gap both close: with two sibling repos under one parent, `inarch init
  * <parent>` wired only the parent. But an agent session opens at a REPO root and
  * reads `.claude/` from its own cwd, so every child was left with no skill, no
  * hooks and no MCP — graft was invisible exactly where the work happens. And a
@@ -53,10 +53,10 @@ test("init at a workspace parent wires every child repo, not just the parent", (
 
   for (const dir of [parent, join(parent, "assign"), join(parent, "app.nanonets")]) {
     assert.ok(existsSync(join(dir, ".claude", "settings.json")), `${dir} settings.json`);
-    assert.ok(existsSync(join(dir, ".claude", "skills", "graft", "SKILL.md")), `${dir} skill`);
+    assert.ok(existsSync(join(dir, ".claude", "skills", "inarch", "SKILL.md")), `${dir} skill`);
     assert.ok(existsSync(join(dir, ".claude", "helpers", "graft-hooks.cjs")), `${dir} hooks shim`);
     const mcp = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
-    assert.ok(mcp.mcpServers?.graft, `${dir} .mcp.json registers graft`);
+    assert.ok(mcp.mcpServers?.inarch, `${dir} .mcp.json registers inarch`);
   }
   assert.match(r.stderr, /workspace: wiring/, "must say it fanned out");
 });

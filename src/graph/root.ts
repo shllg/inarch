@@ -4,7 +4,7 @@
  * graph, so the implicit root is the nearest ANCESTOR holding a graft index:
  * either a repo's own wiring graph (`graft/.graph/wiring.json`) or a workspace
  * parent's children index (`graft/workspace.json`). Nothing indexed anywhere
- * above → the start dir itself, so `graft build` in a fresh repo still means
+ * above → the start dir itself, so `inarch build` in a fresh repo still means
  * "here" and no command silently retargets a sibling tree.
  *
  * Only the IMPLICIT case walks. An explicit `[dir]` argument is taken at face

@@ -1,5 +1,5 @@
 /**
- * CLI wiring for `graft blast` — the command a CI job runs on a pull request.
+ * CLI wiring for `inarch blast` — the command a CI job runs on a pull request.
  *
  * Kept out of cli.ts (argument wiring only) so the diff → seeds → walk → render
  * chain stays unit-testable without shelling out, matching `graph/traverse-cli.ts`.
@@ -22,12 +22,12 @@ export interface BlastCliOptions {
   depth?: string;
   format?: string;
   /** Ask a model to name the clusters that have no concept name (one call, cached).
-   * Opt-in: a local `graft blast` must not need a key or a network round-trip. */
+   * Opt-in: a local `inarch blast` must not need a key or a network round-trip. */
   name?: boolean;
   /** Write the interactive page for this radius here (one self-contained file). */
   exportViz?: string;
   /** Subtitle beside the repo name on the exported page, e.g. "PR #171". Same
-   * meaning as `graft viz --title`. Without it a reader of a published page has no
+   * meaning as `inarch viz --title`. Without it a reader of a published page has no
    * way to tell which pull request they are looking at. */
   title?: string;
   /** Suggest who to tag, from git history over each area. On by default; `--no-owners`
@@ -48,7 +48,7 @@ function resolveFormat(raw: string | undefined): BlastFormat {
   process.exit(1);
 }
 
-/** Same grammar as `graft callers --depth`, so the two commands stay learnable together. */
+/** Same grammar as `inarch callers --depth`, so the two commands stay learnable together. */
 function resolveDepth(raw: string | undefined): number {
   if (raw === undefined) return DEFAULT_DEPTH;
   if (/^(all|full|max)$/i.test(raw)) return Number.POSITIVE_INFINITY;
@@ -68,7 +68,7 @@ export async function runBlastCommand(dir: string, opts: BlastCliOptions): Promi
 
   const graph = loadGraphCached(contextDir);
   if (!graph) {
-    console.error(`✗ no graph found at ${contextDir} — run \`graft build\` first`);
+    console.error(`✗ no graph found at ${contextDir} — run \`inarch build\` first`);
     process.exit(1);
   }
 
@@ -158,7 +158,7 @@ export function repoLabel(root: string): string {
 }
 
 /**
- * Write the interactive page for this radius: the same viewer `graft viz` serves,
+ * Write the interactive page for this radius: the same viewer `inarch viz` serves,
  * with the blast graph as its Context tab.
  *
  * Done here rather than in `viz` because the radius is what a reviewer opened the

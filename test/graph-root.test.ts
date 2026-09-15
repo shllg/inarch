@@ -4,7 +4,7 @@
  * The case that motivates it: an agent session (or a shell) opens in
  * `<repo>/src/foo/`, where there is no `graft/`. Before the walk, every query
  * resolved the context dir as `<cwd>/graft`, found nothing, and reported "no
- * graph — run graft build" while the repo's graph sat two levels up.
+ * graph — run inarch build" while the repo's graph sat two levels up.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { nearestGraftRoot, hasGraftIndex } from "../src/graph/root.js";
 import { tmpRepo } from "./helpers.js";
 
-/** A repo root with a wiring graph — the `graft build` shape. */
+/** A repo root with a wiring graph — the `inarch build` shape. */
 function builtRepo(root: string): string {
   mkdirSync(join(root, "graft", ".graph"), { recursive: true });
   writeFileSync(join(root, "graft", ".graph", "wiring.json"), '{"version":1,"nodes":[],"edges":[]}\n');

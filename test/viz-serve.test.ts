@@ -42,7 +42,7 @@ test("viz server serves viewer, context graph, and gates code graph", async () =
     const missing = await fetch(`${srv.url}/api/code-graph`);
     assert.equal(missing.status, 404);
     const body = await missing.json();
-    assert.match(body.error, /graft build/);
+    assert.match(body.error, /inarch build/);
 
     // valid wiring graph → passthrough
     mkdirSync(join(contextDir, ".graph"), { recursive: true });

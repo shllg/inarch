@@ -271,7 +271,7 @@ test("indexFreshness/staleBanner: recorded files gone from disk (the branch-swit
     assert.ok(stale && stale.missing >= 1, "missing count rises when a recorded file vanishes");
     const banner = staleBanner(stale);
     assert.match(banner ?? "", /ahead of your working tree/, "banner fires when stale");
-    assert.match(banner ?? "", /graft grep/, "banner steers to graft grep, not raw grep");
+    assert.match(banner ?? "", /inarch grep/, "banner steers to inarch grep, not raw grep");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -368,11 +368,11 @@ test("human notes below the generated block survive regeneration", async () => {
   }
 });
 
-// `graft check` on the CLI combines the markdown-context layer (checkContext) and the
-// wiring-graph layer (checkGraph). A keyless `graft build` (no --deep) only ever produces
+// `inarch check` on the CLI combines the markdown-context layer (checkContext) and the
+// wiring-graph layer (checkGraph). A keyless `inarch build` (no --deep) only ever produces
 // the wiring layer — manifest.json (markdown layer) is never written — so `check` must not
 // treat that absence as failure on its own.
-test("graft check: keyless build (no --deep) exits 0 — wiring graph present, markdown layer never built", () => {
+test("inarch check: keyless build (no --deep) exits 0 — wiring graph present, markdown layer never built", () => {
   const dir = mkdtempSync(join(tmpdir(), "ctxgraph-cli-"));
   try {
     writeFileSync(join(dir, "math.ts"), "export function add(a: number, b: number): number {\n  return a + b;\n}\n");
@@ -389,19 +389,19 @@ test("graft check: keyless build (no --deep) exits 0 — wiring graph present, m
   }
 });
 
-test("graft check: neither layer ever built exits 1", () => {
+test("inarch check: neither layer ever built exits 1", () => {
   const dir = mkdtempSync(join(tmpdir(), "ctxgraph-cli-"));
   try {
     const r = runCli(["check", dir]);
     assert.equal(r.status, 1);
     assert.match(r.stdout, /NO GRAPH/);
-    assert.match(r.stdout, /graft build/);
+    assert.match(r.stdout, /inarch build/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("graft check: keyless build then code changes (wiring stale) exits 1", () => {
+test("inarch check: keyless build then code changes (wiring stale) exits 1", () => {
   const dir = mkdtempSync(join(tmpdir(), "ctxgraph-cli-"));
   try {
     const file = join(dir, "math.ts");
@@ -426,7 +426,7 @@ test("graft check: keyless build then code changes (wiring stale) exits 1", () =
   }
 });
 
-test("graft check preserves Rails extraction context after a fresh build", () => {
+test("inarch check preserves Rails extraction context after a fresh build", () => {
   const dir = mkdtempSync(join(tmpdir(), "ctxgraph-rails-check-"));
   const graph = mkdtempSync(join(tmpdir(), "ctxgraph-rails-output-"));
   try {
@@ -475,7 +475,7 @@ test("check cannot certify extension contributions when their fingerprint is mis
   }
 });
 
-test("graft check --json flushes a large stale report before exiting nonzero", () => {
+test("inarch check --json flushes a large stale report before exiting nonzero", () => {
   const dir = mkdtempSync(join(tmpdir(), "graft-check-json-"));
   try {
     const file = join(dir, "many.ts");
@@ -488,13 +488,13 @@ test("graft check --json flushes a large stale report before exiting nonzero", (
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-// ensureGitignored — every `graft build` self-ignores its regenerable graph dir.
+// ensureGitignored — every `inarch build` self-ignores its regenerable graph dir.
 test("ensureGitignored: creates .gitignore with the graft/ entry when none exists", () => {
   const dir = mkdtempSync(join(tmpdir(), "ctxgi-"));
   try {
     ensureGitignored(dir, contextDirFor(dir));
     const gi = readFileSync(join(dir, ".gitignore"), "utf8");
-    // root-ANCHORED (#79): an unanchored `graft/` also matched `.claude/skills/graft/`
+    // root-ANCHORED (#79): an unanchored `graft/` also matched `.claude/skills/inarch/`
     assert.match(gi, /^\/graft\/$/m);
     assert.doesNotMatch(gi, /^graft\/$/m, "must not write the unanchored form");
     assert.match(gi, /regenerable, not committed/);
@@ -604,7 +604,7 @@ test("ensureSearchable: GRAFT_NO_IGNORE=1 skips writing .ignore", () => {
   }
 });
 
-test("graft build with GRAFT_NO_GITIGNORE and GRAFT_NO_IGNORE does not touch ignore files", () => {
+test("inarch build with GRAFT_NO_GITIGNORE and GRAFT_NO_IGNORE does not touch ignore files", () => {
   const dir = mkdtempSync(join(tmpdir(), "ctxgi-build-"));
   try {
     writeFileSync(join(dir, "main.ts"), "export function main(): number {\n  return 1;\n}\n");

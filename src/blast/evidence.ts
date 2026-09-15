@@ -88,7 +88,7 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
  *
  * This is the whole trick behind "why is this symbol here": the edge says A calls
  * B, and this finds the line where it does it. Shared so `blast`'s panel, its
- * comment and `graft callers` all quote the same line for the same edge.
+ * comment and `inarch callers` all quote the same line for the same edge.
  */
 export function referenceLine(
   path: string,

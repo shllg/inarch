@@ -98,7 +98,7 @@ export function resolveConfig(config: EngineConfig = {}): ResolvedConfig {
 
   const headers =
     provider === "openai" && baseUrl?.includes("openrouter.ai")
-      ? { "X-Title": "graft" }
+      ? { "X-Title": "inarch" }
       : undefined;
 
   return {

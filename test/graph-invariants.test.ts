@@ -6,7 +6,7 @@
  * same graph. Both are things every future extraction/resolution change must keep
  * true; without this a malformed edge or a nondeterministic ordering would ship
  * silently. Uses the shared `checkGraphInvariants` so the gate and any future
- * `graft check --invariants` cannot drift apart.
+ * `inarch check --invariants` cannot drift apart.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";

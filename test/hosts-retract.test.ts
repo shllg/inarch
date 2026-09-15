@@ -71,10 +71,10 @@ test('a shared file with no graft block is reported absent and never touched', (
 // JSON configs
 // --------------------------------------------------------------------------
 
-test('mcpServers.graft is removed and foreign servers are preserved', () => {
+test('mcpServers.inarch is removed and foreign servers are preserved', () => {
   const d = fresh();
   const mcp = write(d, '.mcp.json', JSON.stringify({
-    mcpServers: { graft: { command: 'graft', args: ['mcp'] }, other: { command: 'x' } },
+    mcpServers: { inarch: { command: 'inarch', args: ['mcp'] }, other: { command: 'x' } },
   }));
   runRetract(d, { apply: true, global: false });
   const root = JSON.parse(readFileSync(mcp, 'utf8'));
@@ -83,7 +83,7 @@ test('mcpServers.graft is removed and foreign servers are preserved', () => {
 
 test('a JSON config holding only the graft server is deleted', () => {
   const d = fresh();
-  const kiro = write(d, join('.kiro', 'settings', 'mcp.json'), JSON.stringify({ mcpServers: { graft: {} } }));
+  const kiro = write(d, join('.kiro', 'settings', 'mcp.json'), JSON.stringify({ mcpServers: { inarch: {} } }));
   const r = byPath(runRetract(d, { apply: true, global: false }));
   assert.equal(r.get(kiro), 'deleted');
   assert.ok(!existsSync(kiro), 'no orphan {} left behind');
@@ -102,13 +102,13 @@ test('unparseable JSON is reported and left byte-for-byte alone', () => {
 // TOML
 // --------------------------------------------------------------------------
 
-test('[mcp_servers.graft] is removed and the neighbouring table survives', () => {
+test('[mcp_servers.inarch] is removed and the neighbouring table survives', () => {
   const d = fresh();
   const toml = write(d, join('.grok', 'config.toml'),
-    '[mcp_servers.graft]\ncommand = "npx"\nargs = ["-y","@nanonets/graft","mcp"]\n\n[mcp_servers.keepme]\ncommand = "y"\n');
+    '[mcp_servers.inarch]\ncommand = "npx"\nargs = ["-y","inarch","mcp"]\n\n[mcp_servers.keepme]\ncommand = "y"\n');
   runRetract(d, { apply: true, global: false });
   const text = readFileSync(toml, 'utf8');
-  assert.ok(!text.includes('mcp_servers.graft'));
+  assert.ok(!text.includes('mcp_servers.inarch'));
   assert.ok(text.includes('[mcp_servers.keepme]'));
   assert.ok(!text.startsWith('\n'), 'no leading blank line left behind');
 });
@@ -129,7 +129,7 @@ test('graft settings fragments are removed and the user\'s own settings kept', (
       Stop: [{ hooks: [{ type: 'command', command: 'node graft-hooks.cjs stop' }] }],
     },
     footerLinksRegexes: ['graft/[\\w./-]+\\.md', 'docs/.*'],
-    permissions: { allow: ['Bash(graft:*)', 'Bash(ls:*)'] },
+    permissions: { allow: ['Bash(inarch:*)', 'Bash(ls:*)'] },
     model: 'opus',
   }));
   runRetract(d, { apply: true, global: false });
@@ -172,7 +172,7 @@ test('graft/ and its ignore entries go, and the user\'s ignores stay', () => {
   const d = fresh();
   mkdirSync(join(d, 'graft'), { recursive: true });
   writeFileSync(join(d, 'graft', 'INDEX.md'), '# index\n');
-  const gitignore = write(d, '.gitignore', 'node_modules/\ndist/\n\n# graft\'s local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n');
+  const gitignore = write(d, '.gitignore', 'node_modules/\ndist/\n\n# graft\'s local graph cache — regenerable, not committed (run `inarch build`).\n/graft/\n');
   runRetract(d, { apply: true, global: false });
   assert.ok(!existsSync(join(d, 'graft')));
   assert.equal(readFileSync(gitignore, 'utf8'), 'node_modules/\ndist/\n');
@@ -217,7 +217,7 @@ test('a full init is fully retractable, and retraction is idempotent', () => {
     join('.claude', 'settings.json'),
     join('.claude', 'helpers', 'graft-statusline.cjs'),
     join('.claude', 'helpers', 'graft-hooks.cjs'),
-    join('.claude', 'skills', 'graft', 'SKILL.md'),
+    join('.claude', 'skills', 'inarch', 'SKILL.md'),
     join('.cursor', 'rules', 'graft.mdc'),
     '.mcp.json',
   ]) {
@@ -242,10 +242,10 @@ test('--no-global never reaches outside the repo', () => {
   const d = fresh();
   const home = fresh();
   // A machine-level Codex install with graft's hook shim in it.
-  write(home, join('.codex', 'hooks', 'graft', 'graft-hooks.cjs'), 'shim\n');
+  write(home, join('.codex', 'hooks', 'inarch', 'graft-hooks.cjs'), 'shim\n');
   const rs = runRetract(d, { apply: true, home, global: false });
   assert.equal(rs.filter((r) => r.scope === 'global').length, 0, 'no global targets even considered');
-  assert.ok(existsSync(join(home, '.codex', 'hooks', 'graft', 'graft-hooks.cjs')));
+  assert.ok(existsSync(join(home, '.codex', 'hooks', 'inarch', 'graft-hooks.cjs')));
 });
 
 test('global sweep strips graft hook entries from Codex hooks.json, keeping foreign ones', () => {
@@ -268,9 +268,9 @@ test('global sweep strips graft hook entries from Codex hooks.json, keeping fore
 
 test('emptied directories are pruned, not left hollow', () => {
   const d = fresh();
-  write(d, join('.claude', 'skills', 'graft', 'SKILL.md'), 'skill\n');
+  write(d, join('.claude', 'skills', 'inarch', 'SKILL.md'), 'skill\n');
   runRetract(d, { apply: true, global: false });
-  assert.ok(!existsSync(join(d, '.claude', 'skills', 'graft')), 'graft/ skill dir pruned');
+  assert.ok(!existsSync(join(d, '.claude', 'skills', 'inarch')), 'graft/ skill dir pruned');
   assert.ok(!existsSync(join(d, '.claude', 'skills')), 'now-empty skills/ pruned too');
 });
 
@@ -278,17 +278,17 @@ test('emptied directories are pruned, not left hollow', () => {
 // the two append-only writers, now converging
 // --------------------------------------------------------------------------
 
-test('a stale [mcp_servers.graft] is replaced, not skipped', () => {
+test('a stale [mcp_servers.inarch] is replaced, not skipped', () => {
   const d = fresh();
   const cfg = write(d, join('.grok', 'config.toml'),
-    '[mcp_servers.keepme]\ncommand = "y"\n\n[mcp_servers.graft]\ncommand = "OLD-BINARY"\nargs = ["stale"]\n');
+    '[mcp_servers.keepme]\ncommand = "y"\n\n[mcp_servers.inarch]\ncommand = "OLD-BINARY"\nargs = ["stale"]\n');
   const [w] = registerMcpConfigs(d, ['grok'], { home: d });
 
   assert.equal(w.action, 'updated', 'an existing section used to freeze the launch command');
   const text = readFileSync(cfg, 'utf8');
   assert.ok(!text.includes('OLD-BINARY'), 'stale command gone');
   assert.ok(text.includes('[mcp_servers.keepme]'), 'foreign table preserved');
-  assert.equal((text.match(/\[mcp_servers\.graft\]/g) ?? []).length, 1, 'exactly one graft section');
+  assert.equal((text.match(/\[mcp_servers\.inarch\]/g) ?? []).length, 1, 'exactly one graft section');
 
   // Second run is a no-op, not a churn.
   assert.equal(registerMcpConfigs(d, ['grok'], { home: d })[0].action, 'unchanged');
@@ -297,12 +297,12 @@ test('a stale [mcp_servers.graft] is replaced, not skipped', () => {
 
 test('a renamed allowlist entry is dropped; the user\'s own rules stay', () => {
   const { merged } = mergeGraftSettings({
-    permissions: { allow: ['Bash(graft-dev:*)', 'Bash(ls:*)', 'Bash(graft-mytool:*)'] },
+    permissions: { allow: ['Bash(inarch-dev:*)', 'Bash(ls:*)', 'Bash(graft-mytool:*)'] },
   });
   const allow: string[] = merged.permissions.allow;
   assert.ok(allow.includes('Bash(ls:*)'), 'unrelated rule kept');
   assert.ok(allow.includes('Bash(graft-mytool:*)'), 'the user\'s own graft-prefixed rule kept');
-  assert.equal(allow.filter((a) => a === 'Bash(graft-dev:*)').length, 1, 'no duplicate of graft\'s own entry');
+  assert.equal(allow.filter((a) => a === 'Bash(inarch-dev:*)').length, 1, 'no duplicate of graft\'s own entry');
 });
 
 test('a superseded footer regex is replaced rather than stacked', () => {

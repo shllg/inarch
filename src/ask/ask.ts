@@ -1,5 +1,5 @@
 /**
- * `graft ask "<task>"` — the ACTIVE channel.
+ * `inarch ask "<task>"` — the ACTIVE channel.
  *
  * One tool that routes a plain-words query to the right graph and returns a lean,
  * ranked context pack (prose + exact `file:line` + related), never raw JSON and
@@ -351,7 +351,7 @@ type StructuralOutcome = { result: AskResult } | { fallthroughNote: string } | n
 function fallthroughNoteFor(subject: string): string {
   return (
     `structural index: no entries for '${subject}' — showing lexical matches; ` +
-    `for precise edges try graft callers '${subject}', or graft grep '${subject}' for every reference (loosen the pattern if it returns nothing)`
+    `for precise edges try inarch callers '${subject}', or inarch grep '${subject}' for every reference (loosen the pattern if it returns nothing)`
   );
 }
 
@@ -392,7 +392,7 @@ function structural(query: string, graph: GraphV1, limit: number, inPrefix?: str
   }
 
   // Subject resolved but the graph has no indexed edges for it — same "loud,
-  // never a bare empty" contract as `graft callers`/`callees` — fall through
+  // never a bare empty" contract as `inarch callers`/`callees` — fall through
   // to lexical rather than returning a structural result with zero hits.
   if (hits.length === 0) return { fallthroughNote: fallthroughNoteFor(subjects[0].name) };
 
@@ -1248,7 +1248,7 @@ function lexical(
     // so a query that missed everywhere still tells the caller where to look.
     note: scored.length
       ? undefined
-      : `no matching nodes — try different words, or \`graft build\` if graft/ is empty${scopesHereClause(scopes ?? [])}`,
+      : `no matching nodes — try different words, or \`inarch build\` if graft/ is empty${scopesHereClause(scopes ?? [])}`,
   };
 }
 
@@ -1528,7 +1528,7 @@ export interface SkeletonResult {
 export function skeleton(dir: string, file: string, opts: { contextDir?: string } = {}): SkeletonResult {
   const outDir = contextDirFor(resolve(dir), opts.contextDir);
   const graph = loadGraphCached(outDir);
-  if (!graph) return { file, entries: [], note: "no wiring graph — run `graft build` first" };
+  if (!graph) return { file, entries: [], note: "no wiring graph — run `inarch build` first" };
 
   let defs = graph.nodes.filter((n) => n.kind !== "file" && n.path === file);
   if (!defs.length) {
@@ -1559,7 +1559,7 @@ export function skeleton(dir: string, file: string, opts: { contextDir?: string 
 
 /** Render a {@link SkeletonResult} as compact markdown. */
 export function formatSkeleton(r: SkeletonResult): string {
-  const head = `graft skeleton — ${r.file}`;
+  const head = `inarch skeleton — ${r.file}`;
   if (!r.entries.length) return `${head}\n\n${r.note ?? "no definitions."}\n`;
   const lines = r.entries.map((e) => {
     const sig = e.signature ? `  ${e.signature}` : "";
@@ -1577,7 +1577,7 @@ function toTokens(chars: number): number {
 
 /** Render an {@link AskResult} as a compact markdown context pack. */
 export function formatAsk(r: AskResult): string {
-  const head = `graft ask — "${r.query}"  (${r.mode})`;
+  const head = `inarch ask — "${r.query}"  (${r.mode})`;
   // The note prints as its own prominent line(s) right under the header —
   // above every hit — so a loud structural-fallthrough note (or the
   // no-structural-edges / no-lexical-match note) can never be missed by only
@@ -1636,7 +1636,7 @@ function escalationNudge(r: AskResult): string {
   const n = r.hits.length;
   return (
     `\n\n[graft] ${n === 0 ? "no hits" : `only ${n} hit${n === 1 ? "" : "s"}`} — don't re-ask with new wording; switch tool: ` +
-    "`graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses."
+    "`inarch grep \"<literal>\"` for every occurrence · `inarch skeleton <file>` for a file's full API · `inarch callers <symbol>` for who-uses."
   );
 }
 

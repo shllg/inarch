@@ -156,13 +156,13 @@ export function loadWorkspaceGraphs(root: string, override?: string): WorkspaceG
   return { loaded, missing };
 }
 
-/** "2 of 3 workspace repos have graphs; run graft build to cover repoC" — the
+/** "2 of 3 workspace repos have graphs; run inarch build to cover repoC" — the
  * coverage line federated commands append when some listed child is unbuilt.
  * Empty string when every child has a graph. */
 export function coverageNote(g: WorkspaceGraphs): string {
   if (g.missing.length === 0) return "";
   const total = g.loaded.length + g.missing.length;
-  return `${g.loaded.length} of ${total} workspace repos have graphs; run graft build to cover ${g.missing.join(", ")}`;
+  return `${g.loaded.length} of ${total} workspace repos have graphs; run inarch build to cover ${g.missing.join(", ")}`;
 }
 
 /** Prefix a hit pointer with its child dir so a `path:span` (or concept path
@@ -505,7 +505,7 @@ export function federateAsk(
         alsoMatched: unmatched.filter((match) => !federatedSet.has(match.scope)),
       };
     } else {
-      result.note = `no matching nodes across ${wg.loaded.length} workspace repo(s) — try different words, or \`graft build\` at a child`;
+      result.note = `no matching nodes across ${wg.loaded.length} workspace repo(s) — try different words, or \`inarch build\` at a child`;
     }
     if (note) result.note = result.note ? `${result.note}\n${note}` : note;
     return result;
@@ -552,7 +552,7 @@ export function federateAsk(
     const federated = fused.federated.length ? fused.federated : [...new Set(hits.map((h) => h.scope!))];
     result.scopes = { federated, alsoMatched };
   } else {
-    result.note = `no matching nodes across ${wg.loaded.length} workspace repo(s) — try different words, or \`graft build\` at a child`;
+    result.note = `no matching nodes across ${wg.loaded.length} workspace repo(s) — try different words, or \`inarch build\` at a child`;
   }
   if (note) result.note = result.note ? `${result.note}\n${note}` : note;
   return result;
@@ -603,7 +603,7 @@ export function federateGrep(
   return { result, coverage: coverageNote(wg) };
 }
 
-/** One `graft map` section per child (each child's own map, budget split evenly
+/** One `inarch map` section per child (each child's own map, budget split evenly
  * across the loaded children), joined under `<child>/` headers. */
 export function federateMap(
   root: string,
@@ -652,14 +652,14 @@ export async function federateCheck(
       if (degraded) lines.push(`  ${extensionHealthNote(g.extensionHealth!)}`);
     }
   }
-  for (const child of wg.missing) lines.push(`${child}/: not built (run graft build)`);
+  for (const child of wg.missing) lines.push(`${child}/: not built (run inarch build)`);
   const cov = coverageNote(wg);
   if (cov) lines.push("", cov);
   return { text: lines.join("\n") + "\n", ok };
 }
 
 /** Resolve a symbol across every child, grouped per child. Reuses the shared
- * traverse-cli formatters so each block reads exactly like `graft callers`. */
+ * traverse-cli formatters so each block reads exactly like `inarch callers`. */
 export function federateCallers(
   root: string,
   override: string | undefined,
@@ -690,7 +690,7 @@ export function federateCallers(
 
   const cov = coverageNote(wg);
   if (!found) {
-    const base = `no symbol "${symbol}" in any of the ${wg.loaded.length} workspace repo(s) — check spelling or run graft build`;
+    const base = `no symbol "${symbol}" in any of the ${wg.loaded.length} workspace repo(s) — check spelling or run inarch build`;
     return { text: cov ? `${base}\n${cov}` : base, found: false };
   }
   let text = blocks.join("\n\n");

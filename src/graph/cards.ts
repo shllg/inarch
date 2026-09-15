@@ -8,10 +8,10 @@
  * file's symbols with their `L<start>-L<end>` spans and a one-line description, so
  * a `grep <symbol>` / `find <name>` / `cat` lands on the card and the agent reads
  * ~150 tokens instead of the whole source file. Edges stay in the JSON — you can't
- * grep a traversal — and are reached through `graft ask`.
+ * grep a traversal — and are reached through `inarch ask`.
  *
  * Cards are a pure projection: no LLM work here. The one-liner is the node's LLM
- * `summary` when present (after `graft build --deep`), else its deterministic
+ * `summary` when present (after `inarch build --deep`), else its deterministic
  * `signature`, so cards are useful even in a $0 structure-only build.
  */
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from "node:fs";
@@ -212,7 +212,7 @@ export function writeIndex(outDir: string, files: CardFileInfo[]): void {
     "# graft — repo map",
     "",
     "Small markdown nodes summarising this repo. `grep` any term, symbol, or",
-    'filename here, or run `graft ask "<task>"`. Each node carries prose plus exact',
+    'filename here, or run `inarch ask "<task>"`. Each node carries prose plus exact',
     "`file:line`; open a source file only to edit the named span.",
     "",
     // Whoever reads this file has already decided to look at graft, so this is the
@@ -221,7 +221,7 @@ export function writeIndex(outDir: string, files: CardFileInfo[]): void {
     "The same graph is queryable as MCP tools (`graft_find_code`, `graft_find_all`,",
     "`graft_trace_calls`, `graft_file_api`, `graft_repo_map`) where a host exposes them, and",
     "as the `graft` CLI everywhere else. Edges — who calls what — live only in the",
-    "graph, not in these files: `graft callers <symbol>` is the only way to read them.",
+    "graph, not in these files: `inarch callers <symbol>` is the only way to read them.",
     "",
   ];
 
@@ -254,7 +254,7 @@ export function writeIndex(outDir: string, files: CardFileInfo[]): void {
 export interface CoverRef {
   symbol: string;
   kind: string;
-  /** `src/ai/providers.ts:L28-L35` — same vocabulary `graft ask` returns. */
+  /** `src/ai/providers.ts:L28-L35` — same vocabulary `inarch ask` returns. */
   at: string;
 }
 

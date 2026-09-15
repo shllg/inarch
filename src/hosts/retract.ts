@@ -105,7 +105,7 @@ function removeFile(path: string, apply: boolean): RetractAction {
 
 /**
  * Walk up from a just-emptied directory removing empty ancestors, so retracting
- * `.claude/skills/graft/SKILL.md` doesn't leave a hollow `skills/graft/` behind.
+ * `.claude/skills/inarch/SKILL.md` doesn't leave a hollow `skills/inarch/` behind.
  * Stops at the first non-empty directory — never climbs out of the repo, because
  * any ancestor that far up has other content in it.
  */
@@ -167,7 +167,7 @@ function stripSection(path: string, apply: boolean, markers: Markers[] = ALL_MAR
 }
 
 /**
- * Delete `<topKey>.graft` from a JSON config, preserving every other server.
+ * Delete `<topKey>.inarch` from a JSON config, preserving every other server.
  * An unparseable file is reported and left alone — the user may have comments or
  * a half-finished edit in there, and rewriting it would lose more than it fixes.
  */
@@ -183,11 +183,11 @@ function removeJsonKey(path: string, topKey: string, apply: boolean): RetractAct
   const bucket = root[topKey];
   if (typeof bucket !== 'object' || bucket === null || Array.isArray(bucket)) return 'absent';
   const map = bucket as Record<string, unknown>;
-  if (!('graft' in map)) return 'absent';
+  if (!('inarch' in map)) return 'absent';
   if (!apply) {
     return Object.keys(map).length === 1 && Object.keys(root).length === 1 ? 'deleted' : 'removed';
   }
-  delete map.graft;
+  delete map.inarch;
   if (Object.keys(map).length === 0) delete root[topKey];
   if (Object.keys(root).length === 0) return removeFile(path, true);
   writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
@@ -195,7 +195,7 @@ function removeJsonKey(path: string, topKey: string, apply: boolean): RetractAct
 }
 
 /**
- * Delete the `[mcp_servers.graft]` table from a TOML config.
+ * Delete the `[mcp_servers.inarch]` table from a TOML config.
  *
  * Line-based on purpose: a real TOML parse-and-reserialize would reformat the
  * user's whole file. The table runs from its header to the next `[`-header or
@@ -428,7 +428,7 @@ function targets(repo: string, opts: RetractOpts): Target[] {
       { hostId: 'claude', path: statusline, what: 'statusline shim', scope: 'repo', run: (a) => removeFile(statusline, a) },
       { hostId: 'claude', path: hooks, what: 'hooks shim', scope: 'repo', run: (a) => removeFile(hooks, a) },
       { hostId: 'claude', path: skill, what: 'graft skill', scope: 'repo', run: (a) => removeFile(skill, a) },
-      { hostId: 'claude', path: mcp, what: 'mcpServers.graft', scope: 'repo', run: (a) => removeJsonKey(mcp, 'mcpServers', a) },
+      { hostId: 'claude', path: mcp, what: 'mcpServers.inarch', scope: 'repo', run: (a) => removeJsonKey(mcp, 'mcpServers', a) },
     ] as Target[]) add(t);
   }
 

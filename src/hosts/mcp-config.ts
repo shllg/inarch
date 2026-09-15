@@ -43,11 +43,11 @@ export interface McpTarget extends PlannedWrite {
  * bare `graft` works on any machine that has it installed; `npx` remains the
  * fallback for machines that don't.
  */
-const NPX_LAUNCH = { command: 'npx', args: ['-y', '@nanonets/graft', 'mcp'] };
-const BIN_LAUNCH = { command: 'graft', args: ['mcp'] };
+const NPX_LAUNCH = { command: 'npx', args: ['-y', 'inarch', 'mcp'] };
+const BIN_LAUNCH = { command: 'inarch', args: ['mcp'] };
 
 function graftOnPath(): boolean {
-  const r = spawnSync('graft', ['--version'], { stdio: 'ignore', timeout: 5000 });
+  const r = spawnSync('inarch', ['--version'], { stdio: 'ignore', timeout: 5000 });
   return r.status === 0;
 }
 
@@ -83,19 +83,19 @@ export function mergeJsonKey(id: string, path: string, topKey: string, entry: ob
   if (typeof bucket !== 'object' || bucket === null || Array.isArray(bucket)) {
     return { id, path, action: 'skipped-unparseable' };
   }
-  if (JSON.stringify(bucket.graft) === JSON.stringify(entry)) return { id, path, action: 'unchanged' };
+  if (JSON.stringify(bucket.inarch) === JSON.stringify(entry)) return { id, path, action: 'unchanged' };
   const action = existed ? 'updated' : 'created';
-  bucket.graft = entry;
+  bucket.inarch = entry;
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
   return { id, path, action };
 }
 
-/** The `[mcp_servers.graft]` table header, as written and as matched. */
-const TOML_HEADER = '[mcp_servers.graft]';
+/** The `[mcp_servers.inarch]` table header, as written and as matched. */
+const TOML_HEADER = '[mcp_servers.inarch]';
 
 /**
- * Remove the `[mcp_servers.graft]` table from a TOML config, returning the rest.
+ * Remove the `[mcp_servers.inarch]` table from a TOML config, returning the rest.
  *
  * Line-based on purpose: a real parse-and-reserialize would reformat the user's
  * whole file. The table runs from its header to the next `[`-header or EOF, which
@@ -155,7 +155,7 @@ function jsonTarget(
   entry: object,
   scope: PlannedWrite['scope'] = 'repo',
 ): McpTarget {
-  return { hostId, id, path, scope, kind: 'mcp', what: `${topKey}.graft`, format: 'json', topKey, entry };
+  return { hostId, id, path, scope, kind: 'mcp', what: `${topKey}.inarch`, format: 'json', topKey, entry };
 }
 
 /**
@@ -196,7 +196,7 @@ export function mcpTargets(
         // the same TOML shape Codex uses at ~/.codex/config.toml.
         out.push({
           hostId: id, id: 'grok', path: join(repo, '.grok', 'config.toml'),
-          scope: 'repo', kind: 'mcp', what: '[mcp_servers.graft]', format: 'toml',
+          scope: 'repo', kind: 'mcp', what: '[mcp_servers.inarch]', format: 'toml',
         });
         break;
       case 'agents':
@@ -205,7 +205,7 @@ export function mcpTargets(
         if (dirExists(join(home, '.codex'))) {
           out.push({
             hostId: id, id: 'codex', path: join(home, '.codex', 'config.toml'),
-            scope: 'global', kind: 'mcp', what: '[mcp_servers.graft]', format: 'toml',
+            scope: 'global', kind: 'mcp', what: '[mcp_servers.inarch]', format: 'toml',
           });
         }
         if (dirExists(join(home, '.config', 'opencode'))) {

@@ -253,8 +253,8 @@ test("container: a .vue file goes through a real build end to end", async () => 
  *
  * `checkGraph` re-extracts and diffs against the committed graph, so a tier it
  * cannot extract reads as `removed` — and because the remedy it prints is
- * `graft build`, which wrote those very nodes, the drift can never be cleared.
- * That made `graft check` exit non-zero forever on any repo holding a `.vue`
+ * `inarch build`, which wrote those very nodes, the drift can never be cleared.
+ * That made `inarch check` exit non-zero forever on any repo holding a `.vue`
  * file, which is fatal for the CI drift gate it exists to be.
  *
  * Asserted on a clean build with NOTHING changed in between: the only correct

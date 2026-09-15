@@ -1,5 +1,5 @@
 /**
- * CLI wiring + human formatter for `graft grep`.
+ * CLI wiring + human formatter for `inarch grep`.
  *
  * Kept out of cli.ts (argument wiring only) and out of grep.ts (pure core,
  * unit-testable against hand-built fixture graphs without touching a real
@@ -71,10 +71,10 @@ export function formatGrepResult(result: GrepResult): string {
  * otherwise a zero-hit result on a stale graph or wrong root reads as "no
  * matches" when really some files were never searched at all. */
 export function zeroHitNote(result: GrepResult): string {
-  const base = `no hits for "${result.pattern}" in ${result.filesSearched} indexed files. The pattern may be too specific — retry graft grep with a bare symbol name or short substring (drop the receiver, full signature, and regex anchors). All indexed code was searched; use raw grep -rn only for genuinely unindexed files (docs, configs, brand-new files)`;
+  const base = `no hits for "${result.pattern}" in ${result.filesSearched} indexed files. The pattern may be too specific — retry inarch grep with a bare symbol name or short substring (drop the receiver, full signature, and regex anchors). All indexed code was searched; use raw grep -rn only for genuinely unindexed files (docs, configs, brand-new files)`;
   const { files } = result.truncated;
   if (files === 0) return base;
-  return `${base} — note: ${files} indexed file${files === 1 ? "" : "s"} could not be read (stale graph? run graft build)`;
+  return `${base} — note: ${files} indexed file${files === 1 ? "" : "s"} could not be read (stale graph? run inarch build)`;
 }
 
 /**
@@ -89,7 +89,7 @@ export function runGrepCommand(pattern: string, dir: string, opts: GrepCliOption
   const contextDir = contextDirFor(root, opts.globalDir);
   const graph = loadGraphCached(contextDir);
   if (!graph) {
-    console.error("✗ no graph — run graft build first");
+    console.error("✗ no graph — run inarch build first");
     process.exit(1);
   }
 

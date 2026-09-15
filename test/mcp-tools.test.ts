@@ -155,7 +155,7 @@ test('graft_check_freshness reports a missing structural graph when optional con
   );
   const r = await callTool(bare, 'graft_check_freshness', {}, context);
   assert.equal(r.isError, true);
-  assert.match(r.text, /graft check: OK/);
+  assert.match(r.text, /inarch check: OK/);
   assert.match(r.text, /graph check: NO GRAPH/);
   assert.doesNotMatch(r.text, /context cards: not built/);
 });
@@ -171,7 +171,7 @@ test('unbuilt repo and unknown tool are soft errors', async () => {
   const bare = mkdtempSync(join(tmpdir(), 'graft-mcptools-bare-'));
   const r1 = await callTool(bare, 'graft_trace_calls', { symbol: 'x.ts', depth: 2 });
   assert.equal(r1.isError, true);
-  assert.match(r1.text, /graft build/);
+  assert.match(r1.text, /inarch build/);
   const r2 = await callTool(bare, 'nope', {});
   assert.equal(r2.isError, true);
   assert.match(r2.text, /unknown tool/i);
@@ -206,7 +206,7 @@ test('graft_trace_calls direction:out round-trips a callee, and reports a loud n
   const empty = await callTool(d, 'graft_trace_calls', { symbol: 'add', direction: 'out' });
   assert.equal(empty.isError, false);
   assert.match(empty.text, /no indexed callees/);
-  assert.match(empty.text, /graft grep "add"/);
+  assert.match(empty.text, /inarch grep "add"/);
 });
 
 test('graft_trace_calls: unknown symbol / missing symbol are soft isErrors', async () => {
@@ -214,7 +214,7 @@ test('graft_trace_calls: unknown symbol / missing symbol are soft isErrors', asy
   const r1 = await callTool(d, 'graft_trace_calls', { symbol: 'noSuchSymbolAnywhere' });
   assert.equal(r1.isError, true);
   assert.match(r1.text, /no symbol "noSuchSymbolAnywhere" in the graph/);
-  assert.match(r1.text, /check spelling|graft build/);
+  assert.match(r1.text, /check spelling|inarch build/);
 
   const r2 = await callTool(d, 'graft_trace_calls', {});
   assert.equal(r2.isError, true);
@@ -268,7 +268,7 @@ test('graft_find_all: no hits is a soft (non-error) result with the loud fallbac
   const r = await callTool(d, 'graft_find_all', { pattern: 'noSuchPatternAnywhere' });
   assert.equal(r.isError, false);
   assert.match(r.text, /no hits for "noSuchPatternAnywhere"/);
-  assert.match(r.text, /retry graft grep/);
+  assert.match(r.text, /retry inarch grep/);
 });
 
 test('graft_find_all: missing pattern and unbuilt repo are soft errors', async () => {
@@ -280,7 +280,7 @@ test('graft_find_all: missing pattern and unbuilt repo are soft errors', async (
   const bare = mkdtempSync(join(tmpdir(), 'graft-mcptools-grep-bare-'));
   const r2 = await callTool(bare, 'graft_find_all', { pattern: 'add' });
   assert.equal(r2.isError, true);
-  assert.match(r2.text, /graft build/);
+  assert.match(r2.text, /inarch build/);
 });
 
 test('graft_repo_map round-trips a repo orientation on the built fixture', async () => {
@@ -296,7 +296,7 @@ test('graft_repo_map: unbuilt repo is a soft isError with the no-graph message',
   const bare = mkdtempSync(join(tmpdir(), 'graft-mcptools-map-bare-'));
   const r = await callTool(bare, 'graft_repo_map', {});
   assert.equal(r.isError, true);
-  assert.match(r.text, /graft build/);
+  assert.match(r.text, /inarch build/);
 });
 
 test('graft_repo_map: max_dirs arg is honored — the MCP escape hatch for dropped dirs', async () => {
@@ -327,14 +327,14 @@ test('callTool honors a dirOverride for a graph built in a non-default dir', asy
   // which doesn't exist here — must report no graph, not silently succeed.
   const noOverride = await callTool(repo, 'graft_trace_calls', { symbol: 'add' });
   assert.equal(noOverride.isError, true);
-  assert.match(noOverride.text, /graft build/);
+  assert.match(noOverride.text, /inarch build/);
 });
 
 test('graft_file_api returns signatures for a file, errors on unknown file', async () => {
   const d = builtRepo();
   const r = await callTool(d, 'graft_file_api', { file: 'src/math.ts' });
   assert.equal(r.isError, false);
-  assert.match(r.text, /graft skeleton — src\/math\.ts/);
+  assert.match(r.text, /inarch skeleton — src\/math\.ts/);
   assert.match(r.text, /function add {2}function add\(a: number, b: number\): number/);
   const miss = await callTool(d, 'graft_file_api', { file: 'src/nope.ts' });
   assert.equal(miss.isError, true);

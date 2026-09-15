@@ -1,9 +1,9 @@
 /**
- * Build-time sidecar for `graft ask` — `<outDir>/.cache/ask-index.json`.
+ * Build-time sidecar for `inarch ask` — `<outDir>/.cache/ask-index.json`.
  *
  * `ask`'s lexical pass tokenizes every symbol node's name/path/body on every
  * query; at 32k nodes that re-tokenization is ~45% of query time (profiled).
- * `graft build` writes this sidecar once, with the token→count bags per node
+ * `inarch build` writes this sidecar once, with the token→count bags per node
  * plus the corpus-wide document frequencies, so a query just reads counts
  * instead of re-splitting every node's text. It's a derived cache, not
  * checked-in graph data, so it lives under the gitignored `.cache/` dir

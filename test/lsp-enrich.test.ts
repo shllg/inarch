@@ -1,7 +1,7 @@
 /**
  * LSP enrichment tier: registry selection + graceful degradation. These run
  * without any language server installed — they assert the OPT-IN promise that
- * `graft build --lsp` is a safe no-op when no server applies (never a crash,
+ * `inarch build --lsp` is a safe no-op when no server applies (never a crash,
  * never a mutated graph), which is the contract the build relies on.
  */
 import { test } from "node:test";

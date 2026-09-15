@@ -19,7 +19,7 @@ test('post-edit marks dirty and records lastFile', async () => {
   mkdirSync(join(d, 'graft', '.graph'), { recursive: true });
   writeFileSync(join(d, 'graft', '.graph', 'wiring.json'),
     JSON.stringify({ meta: { nodeCount: 0, edgeCount: 0, languages: [] }, nodes: [], edges: [] }));
-  // post-edit no longer runs `graft check` at all (removed: too slow on large repos) — just dirty + lastFile.
+  // post-edit no longer runs `inarch check` at all (removed: too slow on large repos) — just dirty + lastFile.
   process.env.CLAUDE_PROJECT_DIR = d;
   const stdin = JSON.stringify({ tool_input: { file_path: join(d, 'src', 'auth.ts') } });
   await runWithStdin(stdin, () => main('post-edit'));
@@ -97,7 +97,7 @@ test('runSync clears dirty/syncing, recomputes stats, releases lock', () => {
   assert.equal(acquireLock(d), true, 'lock released, so reacquire succeeds');
 });
 
-test("runSync's default build passes --dir <resolved> to graft build when GRAFT_DIR is set", () => {
+test("runSync's default build passes --dir <resolved> to inarch build when GRAFT_DIR is set", () => {
   const d = mkdtempSync(join(tmpdir(), 'graft-sync-dir-'));
   mkdirSync(join(d, 'elsewhere', '.graph'), { recursive: true });
   const argsFile = join(d, 'args-seen.json');
@@ -266,7 +266,7 @@ test('lastFileScopeHint: fails soft (null, logged to stderr) when lastFile is am
 
 // ── prompt hook: --in <scope> narrowing end-to-end ─────────────────────────
 
-/** A `graft ask` stub (`.cjs` so it runs as CommonJS regardless of this
+/** A `inarch ask` stub (`.cjs` so it runs as CommonJS regardless of this
  * package's `"type": "module"`) that records the exact argv it was invoked
  * with — GRAFT_TEST_CLI (mirrors GRAFT_TEST_STDIN/GRAFT_TEST_SYNC_RUN) points
  * graftJson at it instead of the real, unbuilt-in-tests CLI. */
@@ -384,7 +384,7 @@ test('prompt branch stays silent and writes no session when graft is not built',
     (process.stdout as any).write = orig;
     delete process.env.CLAUDE_PROJECT_DIR;
   }
-  assert.equal(chunks.join(''), '', 'no stdout when graft ask unavailable (no dist/cli.js in temp dir)');
+  assert.equal(chunks.join(''), '', 'no stdout when inarch ask unavailable (no dist/cli.js in temp dir)');
   assert.equal(existsSync(join(d, 'graft', '.cache', 'session', 'p1.json')), false, 'no session file on no-op');
 });
 
@@ -424,8 +424,8 @@ test('tool-savings sums every footer when one payload carries several', async ()
       session_id: 'multi',
       tool_response: {
         stdout:
-          'graft callers …\n[graft] tokens saved ≈ 100 (90%) — …\n' +
-          'graft map …\n[graft] tokens saved ≈ 1,000 (99%) — …',
+          'inarch callers …\n[graft] tokens saved ≈ 100 (90%) — …\n' +
+          'inarch map …\n[graft] tokens saved ≈ 1,000 (99%) — …',
       },
     });
     await runWithStdin(stdin, () => main('tool-savings'));
@@ -498,7 +498,7 @@ test('cursor-post-tool: Read → source read, Shell graft → graft read + savin
 
     await runWithStdin(JSON.stringify({
       conversation_id: 'c1', tool_name: 'Shell',
-      tool_input: { command: 'graft ask "x"' },
+      tool_input: { command: 'inarch ask "x"' },
       tool_output: JSON.stringify({ stdout: '…\n[graft] tokens saved ≈ 900 — …' }),
     }), () => main('cursor-post-tool'));
     assert.equal(readSession(d, 'c1').graftReads, 1, 'Shell graft CLI is a graft read');
@@ -542,9 +542,9 @@ test('cursor-mcp: a graft MCP tool is a graft read with savings from result_json
 });
 
 /**
- * The prompt hook's `graft ask` child must stay inside the budget THIS repo has
+ * The prompt hook's `inarch ask` child must stay inside the budget THIS repo has
  * installed, not the one the current source would install. `mergeGraftSettings` runs
- * only during `graft init`, so an npm upgrade leaves every already-wired repo on its
+ * only during `inarch init`, so an npm upgrade leaves every already-wired repo on its
  * old `timeout` — and a child that outlives it gets the whole hook killed by Claude
  * Code, which means no retrieval pack and no session write at all.
  */
@@ -620,12 +620,12 @@ test('promptAskTimeout reads a user-level hook when the repo declares none', () 
   }
 });
 
-// ── GRAFT_DIR: the hooks' own `graft ask`/`graft check` children, and the
+// ── GRAFT_DIR: the hooks' own `inarch ask`/`inarch check` children, and the
 // SessionStart INDEX.md read, must land on the same relocated context dir
 // that readWiring/readStats/patchStats/acquireLock/session state already
 // resolve through resolveContextDir. ──────────────────────────────────────
 
-test('prompt hook passes --dir <resolved> to graft ask when GRAFT_DIR is set', async () => {
+test('prompt hook passes --dir <resolved> to inarch ask when GRAFT_DIR is set', async () => {
   const d = mkdtempSync(join(tmpdir(), 'graft-prompt-dir-'));
   mkdirSync(join(d, 'elsewhere', '.graph'), { recursive: true });
   writeFileSync(join(d, 'elsewhere', '.graph', 'wiring.json'),
@@ -671,7 +671,7 @@ test('prompt hook omits --dir when GRAFT_DIR is unset (byte-identical argv to be
   }
 });
 
-test('post-edit passes --dir <resolved> to graft check when GRAFT_DIR is set', async () => {
+test('post-edit passes --dir <resolved> to inarch check when GRAFT_DIR is set', async () => {
   const d = mkdtempSync(join(tmpdir(), 'graft-postedit-dir-'));
   mkdirSync(join(d, 'elsewhere', '.graph'), { recursive: true });
   writeFileSync(join(d, 'elsewhere', '.graph', 'wiring.json'),

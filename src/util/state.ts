@@ -107,7 +107,7 @@ export interface BuildConfig {
 /** Local, Git-ignored repository configuration. Kept outside generated
  * `graft/` output so deleting/replacing that cache, workspace federation, and
  * custom `--dir` builds cannot erase or redirect the persisted choice. */
-export const BUILD_CONFIG_DIR = '.graft';
+export const BUILD_CONFIG_DIR = '.inarch';
 
 export function buildConfigPath(d: string): string { return join(d, BUILD_CONFIG_DIR, 'config.json'); }
 
@@ -123,7 +123,7 @@ function ensureBuildConfigIgnored(d: string): void {
   });
   if (present) return;
   const gap = current === '' ? '' : current.endsWith('\n') ? '\n' : '\n\n';
-  const block = `${gap}# graft's local repository settings — not committed.\n/${BUILD_CONFIG_DIR}/\n`;
+  const block = `${gap}# inarch's local repository settings — not committed.\n/${BUILD_CONFIG_DIR}/\n`;
   try { writeFileSync(path, current + block); } catch { /* best-effort */ }
 }
 

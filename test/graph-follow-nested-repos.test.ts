@@ -90,7 +90,7 @@ test("follow-nested-repos is opt-in, persisted, reversible, and does not mistake
     assert.ok(!def.nodes.some((n) => n.path.startsWith("external/dep_a/")));
     assert.ok(!def.nodes.some((n) => n.path.startsWith("external/dep_b/")));
     assert.equal(
-      existsSync(join(parent, ".graft", "config.json")),
+      existsSync(join(parent, ".inarch", "config.json")),
       false,
       "an implicit default must not create local config",
     );

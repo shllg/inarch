@@ -16,7 +16,7 @@ test('cursor/gemini/kiro get repo-local JSON entries', () => {
   const w = registerMcpConfigs(repo, ['cursor', 'gemini', 'kiro'], { home });
   assert.deepEqual(w.map((x) => x.action), ['created', 'created', 'created']);
   const cursor = JSON.parse(readFileSync(join(repo, '.cursor', 'mcp.json'), 'utf8'));
-  assert.deepEqual(cursor.mcpServers.graft, { command: 'npx', args: ['-y', '@nanonets/graft', 'mcp'] });
+  assert.deepEqual(cursor.mcpServers.inarch, { command: 'npx', args: ['-y', 'inarch', 'mcp'] });
   assert.ok(existsSync(join(repo, '.gemini', 'settings.json')));
   assert.ok(existsSync(join(repo, '.kiro', 'settings', 'mcp.json')));
 });
@@ -28,7 +28,7 @@ test('existing config keys are preserved; re-run is unchanged', () => {
   registerMcpConfigs(repo, ['cursor'], { home });
   const cfg = JSON.parse(readFileSync(join(repo, '.cursor', 'mcp.json'), 'utf8'));
   assert.ok(cfg.mcpServers.other, 'foreign server preserved');
-  assert.ok(cfg.mcpServers.graft);
+  assert.ok(cfg.mcpServers.inarch);
   const again = registerMcpConfigs(repo, ['cursor'], { home });
   assert.deepEqual(again.map((x) => x.action), ['unchanged']);
 });
@@ -50,10 +50,10 @@ test('agents id: codex TOML + opencode JSON, gated on home dirs', () => {
   const w = registerMcpConfigs(repo, ['agents'], { home });
   assert.equal(w.length, 2);
   const toml = readFileSync(join(home, '.codex', 'config.toml'), 'utf8');
-  assert.match(toml, /^\[mcp_servers\.graft\]$/m);
-  assert.match(toml, /"@nanonets\/graft"/);
+  assert.match(toml, /^\[mcp_servers\.inarch\]$/m);
+  assert.match(toml, /"inarch"/);
   const oc = JSON.parse(readFileSync(join(repo, 'opencode.json'), 'utf8'));
-  assert.equal(oc.mcp.graft.type, 'local');
+  assert.equal(oc.mcp.inarch.type, 'local');
   const again = registerMcpConfigs(repo, ['agents'], { home });
   assert.deepEqual(again.map((x) => x.action).sort(), ['unchanged', 'unchanged']);
 });
@@ -66,7 +66,7 @@ test('codex TOML append preserves existing content', () => {
   const toml = readFileSync(join(home, '.codex', 'config.toml'), 'utf8');
   assert.match(toml, /model = "o3"/);
   assert.match(toml, /\[mcp_servers\.other\]/);
-  assert.match(toml, /\[mcp_servers\.graft\]/);
+  assert.match(toml, /\[mcp_servers\.inarch\]/);
 });
 
 test('grok gets a repo-local TOML MCP section', () => {
@@ -74,8 +74,8 @@ test('grok gets a repo-local TOML MCP section', () => {
   const w = registerMcpConfigs(repo, ['grok'], { home });
   assert.deepEqual(w.map((x) => x.action), ['created']);
   const toml = readFileSync(join(repo, '.grok', 'config.toml'), 'utf8');
-  assert.match(toml, /^\[mcp_servers\.graft\]$/m);
-  assert.match(toml, /"@nanonets\/graft"/);
+  assert.match(toml, /^\[mcp_servers\.inarch\]$/m);
+  assert.match(toml, /"inarch"/);
   const again = registerMcpConfigs(repo, ['grok'], { home });
   assert.deepEqual(again.map((x) => x.action), ['unchanged']);
 });
@@ -96,8 +96,8 @@ test('serverEntry prefers the installed binary and falls back to npx', () => {
   const saved = process.env.GRAFT_MCP_NPX;
   delete process.env.GRAFT_MCP_NPX;
   try {
-    assert.deepEqual(serverEntry({ onPath: true }), { command: 'graft', args: ['mcp'] });
-    assert.deepEqual(serverEntry({ onPath: false }), { command: 'npx', args: ['-y', '@nanonets/graft', 'mcp'] });
+    assert.deepEqual(serverEntry({ onPath: true }), { command: 'inarch', args: ['mcp'] });
+    assert.deepEqual(serverEntry({ onPath: false }), { command: 'npx', args: ['-y', 'inarch', 'mcp'] });
     for (const e of [serverEntry({ onPath: true }), serverEntry({ onPath: false })]) {
       assert.ok(!e.command.startsWith('/'), 'never an absolute path — configs get shared');
     }

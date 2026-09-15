@@ -1,5 +1,5 @@
 /**
- * `graft viz --export`: one self-contained file, which is what makes a per-PR
+ * `inarch viz --export`: one self-contained file, which is what makes a per-PR
  * hosted view possible without a server.
  *
  * The three assertions that matter are all about the inlining, because each failure
@@ -91,7 +91,7 @@ test("viz export: one file, with both graphs and every asset inlined", () => {
 });
 
 test("viz export: opens on the tab that has content, not on an empty Context tab", () => {
-  // A structural `graft build` writes wiring cards (no frontmatter) plus INDEX.md,
+  // A structural `inarch build` writes wiring cards (no frontmatter) plus INDEX.md,
   // and a frontmatter-less file still assembles to one node named after itself — so
   // the Context tab the viewer starts on holds exactly one dot. Exporting from that
   // build used to publish precisely that, with the whole wiring graph hidden behind

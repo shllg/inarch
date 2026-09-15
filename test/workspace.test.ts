@@ -381,7 +381,7 @@ test("one unbuilt child is surfaced, not silently skipped", async () => {
   assert.deepEqual(wg.missing, ["repoC"]);
   assert.equal(
     coverageNote(wg),
-    "2 of 3 workspace repos have graphs; run graft build to cover repoC",
+    "2 of 3 workspace repos have graphs; run inarch build to cover repoC",
   );
   rmSync(p, { recursive: true, force: true });
 });

@@ -114,7 +114,7 @@ export function contextDirFor(root: string, override?: string): string {
 /**
  * Make sure the repo's root `.gitignore` ignores the graft output dir. The
  * graph is a local, regenerable cache (like `node_modules`), not a committed
- * artifact, so every `graft build` adds the entry itself the first time — the
+ * artifact, so every `inarch build` adds the entry itself the first time — the
  * user never has to think about it. No-ops when the entry is already present
  * or the dir lives outside `root` (a custom `--dir` elsewhere, which can't be
  * expressed as a repo-relative ignore). Best-effort: an unwritable `.gitignore`
@@ -141,7 +141,7 @@ export function ensureGitignored(root: string, contextDir: string): void {
   });
   if (present) return;
   const gap = current === "" ? "" : current.endsWith("\n") ? "\n" : "\n\n";
-  const block = `${gap}# graft's local graph cache — regenerable, not committed (run \`graft build\`).\n${entry}\n`;
+  const block = `${gap}# graft's local graph cache — regenerable, not committed (run \`inarch build\`).\n${entry}\n`;
   try { writeFileSync(path, current + block); } catch { /* best-effort — build already succeeded */ }
 }
 

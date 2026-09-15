@@ -23,7 +23,7 @@ test('resolveStats returns the hook-maintained cache when present and non-empty'
   assert.equal(s.dirty, true, 'cache is the source of truth when present');
 });
 
-test('resolveStats falls back to wiring.json when no cache (manual graft build / fresh checkout)', () => {
+test('resolveStats falls back to wiring.json when no cache (manual inarch build / fresh checkout)', () => {
   const d = repo();
   writeWiring(d, {
     meta: { nodeCount: 42, edgeCount: 100, languages: ['typescript'] },
@@ -57,7 +57,7 @@ test('empty wiring.json is a built graph: statusline shows 0 nodes, not "not bui
   assert.equal(s.edgeCount, 0);
   const line = strip(renderStatusline(s, null, { ctxPct: null })[0]);
   assert.doesNotMatch(line, /not built/);
-  assert.doesNotMatch(line, /graft build/);
+  assert.doesNotMatch(line, /inarch build/);
   assert.match(line, /0 nodes \/ 0 edges/);
 });
 
@@ -67,5 +67,5 @@ test('a 0-node cache without wiring.json is still not built', () => {
   assert.equal(resolveStats(d), null, 'no artifact → missing, not an empty graph');
   const line = strip(renderStatusline(null, null, { ctxPct: null })[0]);
   assert.match(line, /not built/);
-  assert.match(line, /graft build/);
+  assert.match(line, /inarch build/);
 });

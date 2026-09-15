@@ -28,7 +28,7 @@ export interface UpkeepResult {
  *
  * The out-of-repo writes (`~/.codex/hooks.json`, `~/.codex/config.toml`) ARE
  * included, because nothing else would ever refresh them: no skill, rule file, or
- * MCP instruction tells an agent to run `graft init`, so leaving them out means a
+ * MCP instruction tells an agent to run `inarch init`, so leaving them out means a
  * Codex user upgrades the binary and keeps the old hook config forever. They're
  * safe to replay — `installCodexHooks` no-ops when `~/.codex` is absent, rewrites
  * only its own entry (matched on `graft-hooks.cjs`), and reports `unchanged` when

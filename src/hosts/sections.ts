@@ -1,5 +1,5 @@
 /**
- * Marker-fenced section upsert. Graft owns exactly the region between the
+ * Marker-fenced section upsert. Inarch owns exactly the region between the
  * markers; everything else in the file belongs to the user and is preserved.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';

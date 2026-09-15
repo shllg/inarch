@@ -1,5 +1,5 @@
 /**
- * CLI wiring for `graft callers` and its `--direction` / `--depth` flags.
+ * CLI wiring for `inarch callers` and its `--direction` / `--depth` flags.
  *
  * One command, one implementation: resolve a symbol via `resolveSymbol`, walk
  * edges via `edgeWalk` (incoming or outgoing, depth 1 or a BFS), and share the
@@ -63,7 +63,7 @@ export function jobEntrypointHint(graph: GraphV1, node: NodeV1): string | undefi
     const query = target.id.slice(target.id.indexOf("#") + 1);
     const matches = resolveSymbol(graph, query, { in: target.path });
     if (matches.length === 1 && matches[0].id === target.id) {
-      return `graft callers ${quoteArg(query)} --in ${quoteArg(target.path)}`;
+      return `inarch callers ${quoteArg(query)} --in ${quoteArg(target.path)}`;
     }
     // Ordinal normalization and nested namespace suffixes can prevent exact
     // selection even within one file. Keep the verified source visible without
@@ -145,7 +145,7 @@ export function looseNoteFor(direction: Direction, name: string, candidateCount:
     candidateCount > 1
       ? ` ${candidateCount} definitions share the name "${name}"; a cross-file caller of an ambiguous name is dropped rather than guessed, so this may undercount.`
       : "";
-  return `  no indexed ${label} — the graph has no ${dir} call/reference edges for this symbol as written.${ambiguity} Check the name (try the bare symbol, or "Type.method"), or find its uses with graft grep "${name}". Fall back to raw grep -rn only for unindexed files`;
+  return `  no indexed ${label} — the graph has no ${dir} call/reference edges for this symbol as written.${ambiguity} Check the name (try the bare symbol, or "Type.method"), or find its uses with inarch grep "${name}". Fall back to raw grep -rn only for unindexed files`;
 }
 
 interface SymbolJson {
@@ -207,7 +207,7 @@ export function runCallersCommand(query: string, dir: string, opts: CallersCliOp
   const contextDir = contextDirFor(root, opts.globalDir);
   const graph = loadGraphCached(contextDir);
   if (!graph) {
-    console.error(`✗ no graph found at ${contextDir} — run \`graft build\` first`);
+    console.error(`✗ no graph found at ${contextDir} — run \`inarch build\` first`);
     process.exit(1);
   }
 
@@ -223,7 +223,7 @@ export function runCallersCommand(query: string, dir: string, opts: CallersCliOp
     return;
   }
   if (matches.length === 0) {
-    console.error(`✗ no symbol "${query}" in the graph — check spelling or run graft build`);
+    console.error(`✗ no symbol "${query}" in the graph — check spelling or run inarch build`);
     process.exit(1);
   }
 

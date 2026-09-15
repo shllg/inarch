@@ -28,7 +28,7 @@ test('explicit agents list overrides detection and flags unknown ids', () => {
   const r = runHostsInit(repo, { home, agents: ['gemini', 'nope'] });
   assert.deepEqual(r.written.map((w) => w.id), ['gemini']);
   assert.deepEqual(r.unknown, ['nope']);
-  assert.ok(readFileSync(join(repo, 'GEMINI.md'), 'utf8').includes('graft ask'));
+  assert.ok(readFileSync(join(repo, 'GEMINI.md'), 'utf8').includes('inarch ask'));
 });
 
 test('all writes every host and re-run converges (idempotent)', () => {
@@ -51,15 +51,15 @@ test('preserves user content around the fenced section', () => {
   assert.deepEqual(r.written.map((w) => w.id), ['copilot']);
   const text = readFileSync(target, 'utf8');
   assert.ok(text.startsWith('# House rules'));
-  assert.ok(text.includes('graft ask'));
+  assert.ok(text.includes('inarch ask'));
 });
 
-test('CLI: graft init --agents gemini writes GEMINI.md and exits 0', () => {
+test('CLI: inarch init --agents gemini writes GEMINI.md and exits 0', () => {
   const repo = fresh();
   execFileSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'init', repo, '--no-build', '--agents', 'gemini'], {
     encoding: 'utf8',
   });
-  assert.ok(readFileSync(join(repo, 'GEMINI.md'), 'utf8').includes('graft ask'));
+  assert.ok(readFileSync(join(repo, 'GEMINI.md'), 'utf8').includes('inarch ask'));
 });
 
 test('CLI: unknown agent id exits non-zero', () => {
@@ -112,7 +112,7 @@ test('runHostsInit registers MCP configs for selected hosts', () => {
   // shape, not the platform.
   assert.match(toPosixPath(r.mcp[0].path), /\.cursor\/mcp\.json$/);
   const cfg = JSON.parse(readFileSync(join(repo, '.cursor', 'mcp.json'), 'utf8'));
-  assert.equal(cfg.mcpServers.graft.command, 'npx');
+  assert.equal(cfg.mcpServers.inarch.command, 'npx');
 });
 
 test('mcp: false skips MCP registration', () => {
@@ -134,7 +134,7 @@ test('runHostsInit installs hooks for the agents id when the CLI home exists', (
   mkdirSync(join(home, '.codex'), { recursive: true });
   const r = runHostsInit(repo, { home, agents: ['agents'] });
   assert.equal(r.hooks.length, 2);
-  assert.ok(existsSync(join(home, '.codex', 'hooks', 'graft', 'graft-hooks.cjs')));
+  assert.ok(existsSync(join(home, '.codex', 'hooks', 'inarch', 'graft-hooks.cjs')));
 });
 
 test('hooks: false skips hook installation', () => {
@@ -164,7 +164,7 @@ test('global: false keeps the instruction file but skips every ~ write', () => {
 // --- CLI: choosing what gets written ------------------------------------
 
 /**
- * Run `graft init` with a scratch home so tests never touch the real ~/.codex,
+ * Run `inarch init` with a scratch home so tests never touch the real ~/.codex,
  * and return stderr. The child gets a pipe rather than a TTY, which is exactly
  * the non-interactive path we want to exercise.
  *
@@ -184,7 +184,7 @@ test('CLI: no flags and no TTY writes nothing and names the detected agents', ()
   const out = cliStderr(repo, home);
   assert.match(out, /nothing written/);
   assert.match(out, /detected: claude, cursor/);
-  assert.match(out, /graft init --agents claude cursor/);
+  assert.match(out, /inarch init --agents claude cursor/);
   assert.deepEqual(readdirSync(repo), []);
 });
 
@@ -246,7 +246,7 @@ test('CLI: --dry-run respects an explicit --agents list', () => {
   const home = fresh(); const repo = fresh();
   mkdirSync(join(home, '.codex'), { recursive: true });
   const out = cliStderr(repo, home, ['--agents', 'adal', '--dry-run']);
-  assert.ok(out.includes(join('.adal', 'skills', 'graft', 'SKILL.md')), out);
+  assert.ok(out.includes(join('.adal', 'skills', 'inarch', 'SKILL.md')), out);
   assert.doesNotMatch(out, /AGENTS\.md/);
   assert.doesNotMatch(out, /affects ALL repos/);
 });

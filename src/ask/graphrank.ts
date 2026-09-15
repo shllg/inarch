@@ -1,5 +1,5 @@
 /**
- * Graph-rank re-ranking for `graft ask` — the fix for lexical keyword-collision.
+ * Graph-rank re-ranking for `inarch ask` — the fix for lexical keyword-collision.
  *
  * Pure term-overlap ranking treats every node independently, so a node that
  * merely shares a word with the query (a window "overlay" widget) can outrank

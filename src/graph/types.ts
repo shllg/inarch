@@ -34,7 +34,7 @@ export type Kind =
 
 /** How confident we are an edge is true, best-first. The hand-written AST
  * resolver assigns `extracted`/`inferred`; the opt-in LSP enrichment pass
- * (`graft build --lsp`) can promote an edge to compiler-grade `lsp_resolved`
+ * (`inarch build --lsp`) can promote an edge to compiler-grade `lsp_resolved`
  * (an exact server-confirmed target) or `lsp_dispatch` (an interface/virtual
  * candidate). Order matters: consumers that rank by provenance treat earlier
  * values as stronger.

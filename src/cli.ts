@@ -37,7 +37,7 @@ import { planInit, selectedWrites } from "./hosts/plan.js";
 import { planRetract, runRetract, changed, type Retraction } from "./hosts/retract.js";
 import { formatNonInteractiveHelp, formatPlan, runPicker } from "./cli-picker.js";
 import { homedir } from "node:os";
-import { formatUpgradeReport, formatVersionReport, getNpmViewVersion, readCurrentVersion, runUpgrade } from "./cli-meta.js";
+import { formatVersionReport, readCurrentVersion } from "./cli-meta.js";
 import { patchBuildConfig, type BuildConfig } from "./util/state.js";
 import { normalizePathPrefix } from "./util/paths.js";
 import { approveExtension, extensionRuns, listExtensions, revokeExtension } from "./graph/extensions.js";
@@ -60,7 +60,7 @@ function noteQuery(dir: string): string {
 }
 
 program
-  .name("graft")
+  .name("inarch")
   .description("Build a repo's context graph as linked markdown, and keep it in sync with the code.")
   .version(currentVersion, "-v, --version")
   .option("--dir <path>", "context graph directory (default: <repo>/graft)")
@@ -93,7 +93,7 @@ const engineFrom = (): Graft => new Graft(cliConfig());
 
 /**
  * Warn (never fail) when a user's `-e` extension has no parser, so it is never a silent
- * no-op — `graft build -e ".vue"` used to accept it, index nothing, and exit 0. The
+ * no-op — `inarch build -e ".vue"` used to accept it, index nothing, and exit 0. The
  * supported set is listed so `-e` also answers "what is actually supported".
  */
 function warnUnsupportedExtensions(exts?: string[]): void {
@@ -169,19 +169,9 @@ function parseTabs(raw: string | undefined): VizTab[] | undefined {
 
 program
   .command("version")
-  .description("Print the installed version and the latest published on npm")
+  .description("Print the installed version")
   .action(() => {
-    const latest = getNpmViewVersion();
-    console.log(formatVersionReport(currentVersion, latest));
-  });
-
-program
-  .command("upgrade")
-  .description("Upgrade the globally installed graft to the latest version on npm")
-  .action(() => {
-    const result = runUpgrade(import.meta.url);
-    console.log(formatUpgradeReport(result));
-    if (result.ran && !result.ok) process.exit(1);
+    console.log(formatVersionReport(currentVersion));
   });
 
 program
@@ -330,7 +320,7 @@ program
       console.error(
         "⚠ no API key set — falling back to the structural build (no LLM summaries).\n" +
           "  Set GRAFT_API_KEY (and GRAFT_PROVIDER / GRAFT_BASE_URL / GRAFT_MODEL for your\n" +
-          "  provider) and re-run `graft build --deep` to add concept nodes and summaries.",
+          "  provider) and re-run `inarch build --deep` to add concept nodes and summaries.",
       );
     }
     if (deep && resolved.usedLegacyEnv) {
@@ -409,12 +399,12 @@ program
     if (process.env.GRAFT_NO_GITIGNORE) {
       console.log(`  ${rel}/ is a local cache — add it to your gitignore if you want it untracked.`);
     } else {
-      console.log(`  ${rel}/ is git-ignored (added automatically) — a local cache; teammates run \`graft build\` to get their own.`);
+      console.log(`  ${rel}/ is git-ignored (added automatically) — a local cache; teammates run \`inarch build\` to get their own.`);
     }
 
     // #127: a --deep run whose LLM calls failed used to print the same success
     // footer and exit 0, so a quota-exhausted build looked identical to a clean
-    // one and `graft check` still said "in sync" (it only ever checked Tier-1).
+    // one and `inarch check` still said "in sync" (it only ever checked Tier-1).
     // The structural graph IS still written and every successful summary is
     // cached, so this is a loud warning about a degraded tier, not a rollback.
     if (deep) {
@@ -436,7 +426,7 @@ program
         if (conceptErrors.length > 0) console.error(`  ${conceptErrors.length} concept-pass error(s).`);
         console.error(`  meaning coverage: ${ready}/${total} symbols (${pct}%).`);
         console.error(
-          "  Nothing computed was lost: re-run `graft build --deep` to resume from what is cached.\n" +
+          "  Nothing computed was lost: re-run `inarch build --deep` to resume from what is cached.\n" +
             "  Pass --allow-partial to accept a degraded meaning tier and exit 0.",
         );
         if (!opts.allowPartial) process.exitCode = 1;
@@ -527,11 +517,11 @@ program
     if (opts.json) {
       console.log(JSON.stringify({ context: r, graph: g.missing ? null : g }, null, 2));
     } else if (bothMissing) {
-      console.log("graft check: NO GRAPH\n\nNo graft/ graph found. Run `graft build` first.");
+      console.log("inarch check: NO GRAPH\n\nNo graft/ graph found. Run `inarch build` first.");
     } else {
       if (r.missing) {
         console.log(
-          "deep layer: not built (run `graft build --deep` for concept nodes) — wiring graph is the source of truth",
+          "deep layer: not built (run `inarch build --deep` for concept nodes) — wiring graph is the source of truth",
         );
       } else {
         console.log(formatCheckReport(r));
@@ -587,7 +577,7 @@ program
     const globalOpts = program.opts<{ dir?: string }>();
     const contextDir = contextDirFor(root, globalOpts.dir);
     if (!existsSync(contextDir)) {
-      console.error(`✗ no context graph at ${contextDir} — run \`graft build --deep\` first`);
+      console.error(`✗ no context graph at ${contextDir} — run \`inarch build --deep\` first`);
       process.exit(1);
     }
     const viewerDir = fileURLToPath(new URL("./viewer/", import.meta.url)); // prebuilt
@@ -604,7 +594,7 @@ program
       });
       const kb = Math.round(out.bytes / 1024);
       console.log(
-        `graft viz → ${out.file} (${kb} kB, ${out.contextNodes} concept nodes, ${out.codeNodes} code nodes)`,
+        `inarch viz → ${out.file} (${kb} kB, ${out.contextNodes} concept nodes, ${out.codeNodes} code nodes)`,
       );
       return;
     }
@@ -615,7 +605,7 @@ program
       port: Number(opts.port),
       repoName: basename(root),
     });
-    console.log(`graft viz → ${srv.url}  (ctrl-c to stop)`);
+    console.log(`inarch viz → ${srv.url}  (ctrl-c to stop)`);
     if (opts.open) {
       const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
       spawn(opener, [srv.url], { stdio: "ignore", detached: true, shell: process.platform === "win32" }).unref();
@@ -776,7 +766,7 @@ program
     const contextDir = contextDirFor(root, globalOpts.dir);
     const graph = loadGraphCached(contextDir);
     if (!graph) {
-      console.error("✗ no graph — run graft build first");
+      console.error("✗ no graph — run inarch build first");
       process.exit(1);
       return;
     }
@@ -790,7 +780,7 @@ program
 
 program
   .command("init")
-  .description("Wire Graft into the AI coding agents used with this repo (instruction files + MCP server; full hooks + statusline + MCP for Claude Code)")
+  .description("Wire Inarch into the AI coding agents used with this repo (instruction files + MCP server; full hooks + statusline + MCP for Claude Code)")
   .argument("[dir]", "target repo directory", ".")
   .option("--no-build", "skip building the graph (wire files only)")
   .option("--agents <ids...>", `only these agents (${hostIds().join(", ")}, claude)`)
@@ -930,12 +920,12 @@ function wireTarget(
       for (const s of res.shims) console.error(`✓ wrote ${s}`);
       console.error(`✓ wrote ${res.skill}`);
       if (res.mcp.action === "skipped-unparseable")
-        console.error(`⚠ .mcp.json: ${res.mcp.path} left unchanged (not valid JSON) — add the graft server manually`);
+        console.error(`⚠ .mcp.json: ${res.mcp.path} left unchanged (not valid JSON) — add the inarch server manually`);
       else if (res.mcp.action === "unchanged")
         console.error(`· mcp claude: ${res.mcp.path} (already registered)`);
       else
-        console.error(`✓ mcp claude: ${res.mcp.path} (${res.mcp.action}) — restart Claude Code to load the graft MCP server`);
-      console.error(res.built ? "✓ built the graph (graft build)" : "· skipped graph build");
+        console.error(`✓ mcp claude: ${res.mcp.path} (${res.mcp.action}) — restart Claude Code to load the inarch MCP server`);
+      console.error(res.built ? "✓ built the graph (inarch build)" : "· skipped graph build");
       if (!wantStatusline) console.error("· skipped Claude Code statusLine (--no-statusline)");
       for (const w of res.warnings) console.error(`⚠ ${w}`);
     }
@@ -976,7 +966,7 @@ function wireTarget(
     if (!wantClaude) {
       console.error(
         buildGraphIfMissing(repo, { build: opts.build, cliPath })
-          ? "✓ built the graph (graft build)"
+          ? "✓ built the graph (inarch build)"
           : "· skipped graph build",
       );
     }
@@ -1042,7 +1032,7 @@ program
     console.error(
       bad.length
         ? `\n⚠ ${bad.length} file(s) could not be parsed and were left as-is — see above.`
-        : "\n✓ graft fully removed. `graft init` re-wires from scratch.",
+        : "\n✓ graft fully removed. `inarch init` re-wires from scratch.",
     );
   });
 

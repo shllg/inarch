@@ -82,7 +82,7 @@ export async function runWorkspaceBuild(root: string, opts: WorkspaceBuildOption
   // index (graft/workspace.json) is written outside buildGraph, so ignore it here too.
   ensureGitignored(root, contextDirFor(root, opts.override));
   console.log(`✓ workspace: ${children.length} repos federated → graft/workspace.json`);
-  console.log(`  graft/ is git-ignored — each teammate runs \`graft build\` to regenerate it locally.`);
+  console.log(`  graft/ is git-ignored — each teammate runs \`inarch build\` to regenerate it locally.`);
 }
 
 export function runWorkspaceAsk(

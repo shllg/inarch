@@ -13,7 +13,7 @@ for (const [name, src] of [['statusline', statuslineShim(BAKED)], ['hooks', hook
     // 1. baked dir is present as the first candidate
     assert.match(src, new RegExp(`const BAKED = "${BAKED}"`));
     // 2. repo node_modules via require.resolve from the project dir
-    assert.match(src, /require\.resolve\('@nanonets\/graft\/package\.json', \{ paths: \[base\] \}\)/);
+    assert.match(src, /require\.resolve\('inarch\/package\.json', \{ paths: \[base\] \}\)/);
     assert.match(src, /fromPkg\(dir\)/);
     // 3. legacy execPath/../lib guess retained
     assert.match(src, /path\.join\(path\.dirname\(process\.execPath\), '\.\.', 'lib'\)/);

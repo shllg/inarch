@@ -34,7 +34,7 @@ test('the stamp round-trips under graft/.cache/', () => {
   });
 });
 
-test('wiringOpts defaults an older stamp to what plain `graft init` does', () => {
+test('wiringOpts defaults an older stamp to what plain `inarch init` does', () => {
   assert.deepEqual(wiringOpts(null), DEFAULT_WIRING_OPTS);
   // A stamp written before flags were recorded: assume the full wiring.
   assert.deepEqual(wiringOpts({ version: '1.0.0', hosts: ['claude'], at: 'x' }), DEFAULT_WIRING_OPTS);
@@ -72,7 +72,7 @@ test('a refresh replays --no-statusline so a later session cannot re-install the
 });
 
 test('by default a refresh DOES reach ~/.codex — nothing else ever would', () => {
-  // No skill, rule file, or MCP instruction tells an agent to run `graft init`,
+  // No skill, rule file, or MCP instruction tells an agent to run `inarch init`,
   // so skipping the out-of-repo writes means a Codex user never gets them.
   const repo = tmpRepo('upkeep-global');
   writeStamp(repo, '1.0.0', ['agents']);

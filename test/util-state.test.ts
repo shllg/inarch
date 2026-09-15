@@ -36,9 +36,9 @@ test("writeBuildConfig + readBuildConfig round-trip includeDirs", () => {
   const d = fresh();
   writeBuildConfig(d, { includeDirs: ["build", "vendor"] });
   assert.deepEqual(readBuildConfig(d), { includeDirs: ["build", "vendor"] });
-  assert.equal(buildConfigPath(d), join(d, ".graft", "config.json"));
+  assert.equal(buildConfigPath(d), join(d, ".inarch", "config.json"));
   assert.equal(existsSync(join(d, "graft", ".cache", "config.json")), false);
-  assert.match(readFileSync(join(d, ".gitignore"), "utf8"), /^\/\.graft\/$/m);
+  assert.match(readFileSync(join(d, ".gitignore"), "utf8"), /^\/\.inarch\/$/m);
 });
 
 test("readIncludeDirs turns a persisted list into a Set; an empty persisted list reads as undefined (default behavior)", () => {

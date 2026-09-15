@@ -190,7 +190,7 @@ test("a git worktree starts with no graph, and one query gives it a correct one"
 
   // A query writes only what a query reads (the rule in refresh.ts's header). The
   // parent's cards describe the parent's *branch*, and nothing on the query path would
-  // ever correct them, so they must not travel — `graft build` regenerates them below.
+  // ever correct them, so they must not travel — `inarch build` regenerates them below.
   assert.equal(existsSync(join(outOf(wt), "INDEX.md")), false, "a query writes no markdown");
   assert.equal(existsSync(join(outOf(wt), "graph-extraction-and-loading.md")), false, "nor cards");
 
@@ -315,7 +315,7 @@ test("seedGraph declines a --dir override and a checkout that already has a grap
   rmSync(wt, { recursive: true, force: true });
 });
 
-test("a plain repo with no parent checkout is left to `graft build`", async () => {
+test("a plain repo with no parent checkout is left to `inarch build`", async () => {
   const solo = gitRepo(); // a main checkout, never built
   const r = await ensureFreshGraph(solo);
   assert.equal(existsSync(wiringPath(outOf(solo))), false, "no surprise full build under a query");
@@ -323,7 +323,7 @@ test("a plain repo with no parent checkout is left to `graft build`", async () =
   rmSync(solo, { recursive: true, force: true });
 });
 
-test("`graft build` in a worktree starts from the parent's graph, not from scratch", async () => {
+test("`inarch build` in a worktree starts from the parent's graph, not from scratch", async () => {
   const main = gitRepo();
   await buildGraph(main);
   const wt = addWorktree(main, "build");

@@ -1,10 +1,10 @@
 /**
- * #252 — `graft build --deep --only-dir` must not walk the whole repo.
+ * #252 — `inarch build --deep --only-dir` must not walk the whole repo.
  *
  * Tier-1 wiring already honors `--only-dir` (`filterByOnlyDirs`). The Tier-2
  * concept pass (`buildContext`) and its freshness check (`checkContext`) must
  * enumerate the same whitelist — otherwise out-of-scope files get summarized
- * and pulled into concept synthesis, and `graft check` reports them as added.
+ * and pulled into concept synthesis, and `inarch check` reports them as added.
  *
  * No LLM: a recording summarizer is the queue. Wiring assertions reuse
  * `buildGraph` so this file cannot drift from `graph-only-dir.test.ts`.

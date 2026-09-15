@@ -1,5 +1,5 @@
 /**
- * Registry of AI coding hosts Graft can write instructions for.
+ * Registry of AI coding hosts Inarch can write instructions for.
  * Adding a host = adding one entry here (plus a renderer if it needs
  * a new file format).
  *
@@ -42,7 +42,7 @@ export const HOSTS: HostTarget[] = [
     id: 'adal',
     name: 'AdaL',
     kind: 'owned',
-    relPath: join('.adal', 'skills', 'graft', 'SKILL.md'),
+    relPath: join('.adal', 'skills', 'inarch', 'SKILL.md'),
     content: skillTemplate,
     detect: (p) => p.dirExists(join(p.home, '.adal')) || p.dirExists(join(p.repo, '.adal')),
   },
@@ -66,7 +66,7 @@ export const HOSTS: HostTarget[] = [
     id: 'grok',
     name: 'Grok (xAI)',
     kind: 'owned',
-    relPath: join('.grok', 'skills', 'graft', 'SKILL.md'),
+    relPath: join('.grok', 'skills', 'inarch', 'SKILL.md'),
     content: skillTemplate,
     detect: (p) => p.dirExists(join(p.home, '.grok')) || p.dirExists(join(p.repo, '.grok')),
   },

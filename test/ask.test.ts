@@ -1,5 +1,5 @@
 /**
- * Tests for `graft ask` — specifically the `source` option, which turns the
+ * Tests for `inarch ask` — specifically the `source` option, which turns the
  * pack from a locator (pointers only) into a retriever (source inlined at each
  * span). The retriever behaviour is what makes ask substitutive: the agent
  * reads the span from the pack instead of opening the file.
@@ -226,7 +226,7 @@ test("skeleton lists a file's definitions in span order, matches by basename", a
     const byBase = skeleton(dir, "api.ts");
     assert.equal(byBase.file, "api.ts");
     const txt = formatSkeleton(r);
-    assert.match(txt, /graft skeleton — api\.ts/);
+    assert.match(txt, /inarch skeleton — api\.ts/);
     assert.match(txt, /L\d+-L\d+ {2}function first/);
     assert.match(skeleton(dir, "nope.ts").note ?? "", /no definitions/);
   } finally {
@@ -652,7 +652,7 @@ test("ask: structural subject resolves but has zero edges — falls through to l
     assert.equal(r.mode, "lexical", "never a bare empty structural result");
     assert.ok(r.note, "a fallthrough note must be set");
     assert.match(r.note!, /structural index: no entries for 'unusedHelper'/);
-    assert.match(r.note!, /graft callers 'unusedHelper'/);
+    assert.match(r.note!, /inarch callers 'unusedHelper'/);
     assert.ok(r.hits.length > 0, "lexical fallback still finds the function by name");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -678,7 +678,7 @@ test("formatAsk: the structural fallthrough note prints prominently, before any 
     await buildGraph(dir);
     const r = ask(dir, "who calls unusedHelper");
     const out = formatAsk(r);
-    assert.ok(out.startsWith("graft ask —"), "header is the first line");
+    assert.ok(out.startsWith("inarch ask —"), "header is the first line");
     const noteIdx = out.indexOf("⚠ structural index: no entries");
     assert.ok(noteIdx > 0, "the note is rendered");
     const firstHitIdx = out.search(/\n1\.\s/); // lexical hit numbering starts at "1. "
@@ -1053,7 +1053,7 @@ test("ask --in: unknown prefix on a single-scope repo throws without a scopes-he
   }
 });
 
-test("CLI: `graft ask --in <unknown>` exits 1 with the scope-enumerating error on stderr", async () => {
+test("CLI: `inarch ask --in <unknown>` exits 1 with the scope-enumerating error on stderr", async () => {
   const dir = multiScopeFixture();
   try {
     await buildGraph(dir);

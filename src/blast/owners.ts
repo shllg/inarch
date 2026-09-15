@@ -240,7 +240,7 @@ export function diffAuthors(root: string, base: string): string[] {
 /**
  * Whoever git would sign a commit as, here and now.
  *
- * The local counterpart of {@link diffAuthors}. `graft blast` with no `--base`
+ * The local counterpart of {@link diffAuthors}. `inarch blast` with no `--base`
  * compares the working tree against HEAD, so there is no commit range to read
  * authors from — and without this, the one person guaranteed to have written the
  * change being examined is also the top name in its own "who to tag" list.

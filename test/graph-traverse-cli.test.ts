@@ -1,5 +1,5 @@
 /**
- * CLI tests for `graft callers` and its `--direction`/`--depth` flags — the one
+ * CLI tests for `inarch callers` and its `--direction`/`--depth` flags — the one
  * command that wires src/graph/traverse.ts's pure resolver + edge-walkers into
  * the `graft` binary (`--direction out` is the old `callees`; `--depth N` is the
  * old `impact`). Runs the real CLI via execFileSync (same pattern as
@@ -41,7 +41,7 @@ function runCli(args: string[]): { stdout: string; stderr: string; status: numbe
   }
 }
 
-test('graft callers: happy path shows header and the caller hit', () => {
+test('inarch callers: happy path shows header and the caller hit', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'add', d]);
   assert.equal(r.status, 0);
@@ -49,7 +49,7 @@ test('graft callers: happy path shows header and the caller hit', () => {
   assert.match(r.stdout, /calls ← sub \(src\/math\.ts:/);
 });
 
-test('graft callers --json: shape matches {query, matches:[{symbol,hits}]}', () => {
+test('inarch callers --json: shape matches {query, matches:[{symbol,hits}]}', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'add', d, '--json']);
   assert.equal(r.status, 0);
@@ -68,7 +68,7 @@ test('graft callers --json: shape matches {query, matches:[{symbol,hits}]}', () 
   assert.equal(m.hits[0].depth, 1);
 });
 
-test('graft callers exposes extension evidence in human and JSON output', () => {
+test('inarch callers exposes extension evidence in human and JSON output', () => {
   const d = builtRepo(), file = join(d, 'graft/.graph/wiring.json');
   const graph = JSON.parse(readFileSync(file, 'utf8'));
   const proof = { origin: 'extension', confidence: 'extension', extension: 'a'.repeat(64), extensionDigest: 'b'.repeat(64), via: 'GET /calendars' };
@@ -82,16 +82,16 @@ test('graft callers exposes extension evidence in human and JSON output', () => 
   assert.match(runCli(['callers', 'add', d, '--no-refresh']).stdout, /extension aaaaaaaaaaaa; GET \/calendars/);
 });
 
-test('graft callers: unknown symbol exits 1 with a stderr message', () => {
+test('inarch callers: unknown symbol exits 1 with a stderr message', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'noSuchSymbolAnywhere', d]);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /no symbol "noSuchSymbolAnywhere" in the graph/);
-  assert.match(r.stderr, /graft build/);
+  assert.match(r.stderr, /inarch build/);
   assert.equal(r.stdout, '');
 });
 
-test('graft callers --direction out: happy path shows the outgoing (callee) hit', () => {
+test('inarch callers --direction out: happy path shows the outgoing (callee) hit', () => {
   const d = builtRepo();
   // `sub` calls `add`, so its outgoing edge points at add with a `→` arrow.
   const r = runCli(['callers', 'sub', d, '--direction', 'out']);
@@ -100,17 +100,17 @@ test('graft callers --direction out: happy path shows the outgoing (callee) hit'
   assert.match(r.stdout, /calls → add \(src\/math\.ts:/);
 });
 
-test('graft callers --direction out: zero-edge symbol prints a loud callees note and still exits 0', () => {
+test('inarch callers --direction out: zero-edge symbol prints a loud callees note and still exits 0', () => {
   const d = builtRepo();
   // `add` calls nothing, so its callees are empty — must not be a silent list.
   const r = runCli(['callers', 'add', d, '--direction', 'out']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /add · function · src\/math\.ts:/);
   assert.match(r.stdout, /no indexed callees/);
-  assert.match(r.stdout, /graft grep "add"/);
+  assert.match(r.stdout, /inarch grep "add"/);
 });
 
-test('graft callers --direction out --json: zero-edge symbol includes a note field', () => {
+test('inarch callers --direction out --json: zero-edge symbol includes a note field', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'add', d, '--direction', 'out', '--json']);
   assert.equal(r.status, 0);
@@ -121,7 +121,7 @@ test('graft callers --direction out --json: zero-edge symbol includes a note fie
   assert.equal(m.symbol.name, 'add');
   assert.equal(m.hits.length, 0);
   assert.ok(m.note, 'zero-edge match must have a note field');
-  assert.match(m.note, /graft grep "add"/);
+  assert.match(m.note, /inarch grep "add"/);
 });
 
 function ambiguousRepo(): string {
@@ -160,7 +160,7 @@ test('A6 --json: the ambiguous-name note includes the candidate count', () => {
   }
 });
 
-test('graft callers --depth: depth flag walks the BFS transitively (blast radius)', () => {
+test('inarch callers --depth: depth flag walks the BFS transitively (blast radius)', () => {
   const d = builtRepo();
   // compute -> sub -> add: callers of `add` at depth 1 is just `sub`;
   // depth 2 also reaches `compute` and tags each hit with its depth.
@@ -178,7 +178,7 @@ test('graft callers --depth: depth flag walks the BFS transitively (blast radius
   assert.match(deeper.stdout, /\[depth 2\]/);
 });
 
-test('graft callers --depth all: walks the entire connected closure', () => {
+test('inarch callers --depth all: walks the entire connected closure', () => {
   const d = builtRepo();
   // compute -> sub -> add. `all` must reach BOTH hops (the full closure),
   // like an unbounded depth, terminating when no new node is found.
@@ -190,28 +190,28 @@ test('graft callers --depth all: walks the entire connected closure', () => {
   assert.match(all.stdout, /\[depth 2\]/);
 });
 
-test('graft callers --depth: rejects a non-numeric, non-"all" value with exit 1', () => {
+test('inarch callers --depth: rejects a non-numeric, non-"all" value with exit 1', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'add', d, '--depth', 'banana']);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /--depth must be a positive number or "all"/);
 });
 
-test('graft callers --direction: rejects a bad value with exit 1', () => {
+test('inarch callers --direction: rejects a bad value with exit 1', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'add', d, '--direction', 'sideways']);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /--direction must be "in" or "out"/);
 });
 
-test('graft callers: no graph at all is a stderr error, exit 1', () => {
+test('inarch callers: no graph at all is a stderr error, exit 1', () => {
   const bare = mkdtempSync(join(tmpdir(), 'graft-traversecli-bare-'));
   const r = runCli(['callers', 'add', bare]);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /graft build/);
+  assert.match(r.stderr, /inarch build/);
 });
 
-test('graft callers: quotes the call site, and only where it is the right line', () => {
+test('inarch callers: quotes the call site, and only where it is the right line', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'add', d]);
   assert.equal(r.status, 0);
@@ -286,7 +286,7 @@ end`);
     // Let a real shell decode the emitted command, but capture its arguments
     // instead of invoking an installed binary. The filename's substitutions
     // are harmless witnesses that quoting preserves literal source paths.
-    const args = execFileSync('/bin/sh', ['-c', String.raw`graft() { printf '%s\0' "$@"; }; ` + command], {
+    const args = execFileSync('/bin/sh', ['-c', String.raw`inarch() { printf '%s\0' "$@"; }; ` + command], {
       encoding: 'utf8', env: { ...process.env, GRAFT_HINT_QUOTE_TEST: 'expanded' },
     }).split('\0').slice(0, -1);
     const followed = runCli([...args, d, '--json', '--no-refresh']);
@@ -347,7 +347,7 @@ class Runner; def queue; Mail::DeliveryJob.perform_later; end; end`,
     for (const text of [cli.stdout, mcp.text, json.matches[0].hint]) {
       const hint = text.split('\n').find((line: string) => line.includes('ActiveJob entrypoint:'));
       assert.ok(hint, text);
-      assert.doesNotMatch(hint, /graft callers/);
+      assert.doesNotMatch(hint, /inarch callers/);
       assert.ok(hint.includes(target.id), hint);
       assert.ok(hint.includes(`${target.path}:${target.span}`), hint);
       assert.match(hint, fixture.reason);

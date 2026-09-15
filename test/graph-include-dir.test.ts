@@ -1,5 +1,5 @@
 /**
- * A5 — `graft build --include-dir <name>` end-to-end through the real CLI.
+ * A5 — `inarch build --include-dir <name>` end-to-end through the real CLI.
  *
  * SKIP_DIRS eats real source in some ecosystems (e.g. a build/ directory that
  * genuinely holds hand-written code). This is the explicit, persisted
@@ -30,7 +30,7 @@ function runCli(args: string[]): void {
 }
 
 /** Like {@link runCli}, but captures a non-zero exit instead of throwing —
- * for the --include-dir validation tests, which expect `graft build` to
+ * for the --include-dir validation tests, which expect `inarch build` to
  * reject bad input rather than run to completion. */
 function runCliCapture(args: string[]): { stdout: string; stderr: string; status: number } {
   try {
@@ -92,7 +92,7 @@ test("A5: deleting the generated graft cache does not delete the persisted inclu
     runCli(["build", d]);
     const rebuilt = graphOf(d);
     assert.ok(rebuilt?.nodes.some((n) => n.id === "build/util.ts#fromBuild"));
-    assert.equal(existsSync(join(d, ".graft", "config.json")), true);
+    assert.equal(existsSync(join(d, ".inarch", "config.json")), true);
   } finally {
     rmSync(d, { recursive: true, force: true });
   }
@@ -107,7 +107,7 @@ test("A5: custom --dir builds keep repository config outside both output directo
 
     const graph = readGraph(wiringPath(out));
     assert.ok(graph?.nodes.some((n) => n.id === "build/util.ts#fromBuild"));
-    assert.equal(existsSync(join(d, ".graft", "config.json")), true);
+    assert.equal(existsSync(join(d, ".inarch", "config.json")), true);
     assert.equal(existsSync(join(d, "graft", ".cache", "config.json")), false);
     assert.equal(existsSync(join(out, ".cache", "config.json")), false);
   } finally {
@@ -130,7 +130,7 @@ test("A5: --include-dir rejects a dot-prefixed name", () => {
     assert.equal(r.status, 1, `expected exit 1, got ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`);
     assert.match(r.stderr, /--include-dir/);
     assert.match(r.stderr, /\.github/);
-    assert.equal(existsSync(join(d, ".graft", "config.json")), false, "must not persist an invalid value");
+    assert.equal(existsSync(join(d, ".inarch", "config.json")), false, "must not persist an invalid value");
   } finally {
     rmSync(d, { recursive: true, force: true });
   }
@@ -143,7 +143,7 @@ test("A5: --include-dir rejects a value containing a path separator", () => {
     assert.equal(r.status, 1, `expected exit 1, got ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`);
     assert.match(r.stderr, /--include-dir/);
     assert.match(r.stderr, /foo\/bar/);
-    assert.equal(existsSync(join(d, ".graft", "config.json")), false, "must not persist an invalid value");
+    assert.equal(existsSync(join(d, ".inarch", "config.json")), false, "must not persist an invalid value");
   } finally {
     rmSync(d, { recursive: true, force: true });
   }

@@ -1,10 +1,10 @@
 // Generates the tiny `.cjs` shims committed into a repo's `.claude/helpers/`. Their only
-// job is to locate the installed `@nanonets/graft` package's `dist/claude/<entry>.js` and
+// job is to locate the installed `inarch` package's `dist/claude/<entry>.js` and
 // call into it — so the real logic lives in the package and upgrades with it.
 //
 // Candidates, cheapest first (no subprocess for 1–3):
 //   1. `bakedDir`   — the absolute `dist/claude` graft was running from at init time.
-//                     Correct with zero guesswork for whoever ran `graft init`.
+//                     Correct with zero guesswork for whoever ran `inarch init`.
 //   2. repo node_modules — a local dev-dep install.
 //   3. `execDir/../lib`  — the cheap legacy guess (covers nvm / classic prefix layout).
 //   4. `npm root -g`     — authoritative global dir, layout-agnostic. Only shelled out to
@@ -13,11 +13,11 @@
 //                     at their own code for us to import.
 //
 // Among the candidates that exist we take the HIGHEST VERSION, not the first hit. First-hit
-// silently pinned users to a stale graft forever: `bakedDir` points into one Node install's
-// global node_modules, so switching Node versions (nvm/volta) or moving the install leaves
-// the old directory on disk and still winning, and `npm i -g @nanonets/graft@latest`
+// silently pinned users to a stale install forever: `bakedDir` points into one Node
+// install's global node_modules, so switching Node versions (nvm/volta) or moving the
+// install leaves the old directory on disk and still winning, and reinstalling globally
 // upgrades a directory the shim never looks at. The upgrade appeared to work and changed
-// nothing — the shim kept loading the version from whenever `graft init` was last run.
+// nothing — the shim kept loading the version from whenever `inarch init` was last run.
 function shim(entryFile: string, call: string, bakedDir: string): string {
   return `#!/usr/bin/env node
 const path = require('path');
@@ -27,10 +27,10 @@ const { execFileSync } = require('child_process');
 const dir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const BAKED = ${JSON.stringify(bakedDir)};
 
-// The dist/claude dir of @nanonets/graft resolved from a base whose node_modules is searched.
+// The dist/claude dir of inarch resolved from a base whose node_modules is searched.
 function fromPkg(base) {
   try {
-    const pkg = require.resolve('@nanonets/graft/package.json', { paths: [base] });
+    const pkg = require.resolve('inarch/package.json', { paths: [base] });
     return path.join(path.dirname(pkg), 'dist', 'claude');
   } catch { return null; }
 }
@@ -80,12 +80,12 @@ function entry(name) {
   const hit = best(cheap, name);
   if (hit) return path.join(hit, name);
   const gr = globalRoot();
-  const global = gr && path.join(gr, '@nanonets', 'graft', 'dist', 'claude');
+  const global = gr && path.join(gr, 'inarch', 'dist', 'claude');
   if (global && fs.existsSync(path.join(global, name))) return path.join(global, name);
   return path.join(dir, 'dist', 'claude', name); // last-ditch; import will no-op if absent
 }
 
-import(pathToFileURL(entry(${JSON.stringify(entryFile)})).href).then((m) => ${call}).catch(() => { /* graft unavailable — no-op */ });
+import(pathToFileURL(entry(${JSON.stringify(entryFile)})).href).then((m) => ${call}).catch(() => { /* inarch unavailable — no-op */ });
 `;
 }
 

@@ -28,7 +28,7 @@ function replyError(id: unknown, code: number, message: string): void {
  * `hosts/claude-global.ts` registers graft at the *user* MCP scope, which starts this
  * server in every project the user opens — including ones that never asked for graft.
  * Six tool schemas is real context, charged on every turn of every session, and in a
- * repo with no graph every one of them can only answer "run graft build". So a repo
+ * repo with no graph every one of them can only answer "run inarch build". So a repo
  * that never invited graft is told there is nothing to call.
  *
  * The parent-checkout clause is not an optimization, it is the case the global
@@ -55,7 +55,7 @@ function advertised(root: string, dirOverride?: string): typeof TOOLS {
 export function startMcpServer(root: string, dirOverride?: string, version = '0'): void {
   // The self-maintenance pass, run once at boot. This is the ONLY channel that
   // reaches hosts with no hook support (Cursor, and any plain MCP client): it
-  // refreshes rule files an older `graft init` wrote, and kicks off the cached
+  // refreshes rule files an older `inarch init` wrote, and kicks off the cached
   // registry check. Both are fail-soft, and the resulting lines ride along in
   // `instructions` below — stdout is protocol-only, so there is nowhere else to
   // put them. Never blocks: the registry fetch happens in a detached child.
@@ -80,7 +80,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         reply(id, {
           protocolVersion: params?.protocolVersion ?? '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'graft', version },
+          serverInfo: { name: 'inarch', version },
           // The one channel that survives tool deferral — see ./instructions.ts.
           instructions: upkeep.length ? `${upkeep.join('\n')}\n\n${mcpInstructions()}` : mcpInstructions(),
         });

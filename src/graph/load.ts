@@ -1,8 +1,8 @@
 /**
  * mtime-keyed in-process cache over the two readers `ask()` calls on every
  * query: the wiring graph (`readGraph`) and the ask sidecar (`readAskIndex`).
- * `graft ask` re-parses these from disk on every invocation; in a long-lived
- * process — the MCP server, or `graft ask` invoked repeatedly in one process —
+ * `inarch ask` re-parses these from disk on every invocation; in a long-lived
+ * process — the MCP server, or `inarch ask` invoked repeatedly in one process —
  * that means re-parsing the same ~tens-of-MB JSON on every tool call.
  *
  * Keyed by `(path, mtimeMs, size)` from `statSync`, so a rebuild (`graft
@@ -13,7 +13,7 @@
  * immediately (no negative caching).
  *
  * **Cache invalidation assumption:** This strategy assumes filesystem mtime
- * resolution is finer than build cadence. This is safe because `graft build`
+ * resolution is finer than build cadence. This is safe because `inarch build`
  * rewrites the entire output file atomically, so same-size rewrites within a
  * single mtime tick (which would serve stale data) are infeasible in practice.
  * On APFS (macOS) mtime is nanosecond-granular and a build takes milliseconds,

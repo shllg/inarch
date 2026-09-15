@@ -1,5 +1,5 @@
 /**
- * What `graft init` *would* write, computed before anything is written.
+ * What `inarch init` *would* write, computed before anything is written.
  *
  * The picker and `--dry-run` both need the exact path list up front, so every
  * writer in the init path (instruction files, MCP configs, hooks, the Claude

@@ -1,5 +1,5 @@
 /**
- * `graft blast` — the blast radius of a diff, which is what the CI job posts on a
+ * `inarch blast` — the blast radius of a diff, which is what the CI job posts on a
  * pull request.
  *
  * The behaviour worth pinning down is the SEEDING rule, because that is what makes

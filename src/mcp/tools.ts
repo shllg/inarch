@@ -33,10 +33,10 @@ export interface ToolDef {
   inputSchema: object;
 }
 
-const NO_GRAPH = 'no graph found — run `graft build` first';
+const NO_GRAPH = 'no graph found — run `inarch build` first';
 
 function unknownSymbolText(query: string): string {
-  return `no symbol "${query}" in the graph — check spelling or run \`graft build\``;
+  return `no symbol "${query}" in the graph — check spelling or run \`inarch build\``;
 }
 
 export const TOOLS: ToolDef[] = [
@@ -127,7 +127,7 @@ export const TOOLS: ToolDef[] = [
 
 /** Render every resolved match's header + edge report (or the loud zero-edge
  * note), one block per match, joined with a blank line — the same grouping
- * `graft callers` uses for multi-match symbols. `showDepth` tags each hit with
+ * `inarch callers` uses for multi-match symbols. `showDepth` tags each hit with
  * its BFS depth (for transitive `depth>1` walks). */
 function renderMatches(
   direction: Direction,
@@ -275,7 +275,7 @@ async function callSingleTool(
         const g = await engine.checkGraph(root);
         const parts = [
           r.missing
-            ? 'context cards: not built (optional deep layer; run `graft build --deep` to generate them).'
+            ? 'context cards: not built (optional deep layer; run `inarch build --deep` to generate them).'
             : formatCheckReport(r),
         ];
         parts.push(formatGraphCheckReport(g));

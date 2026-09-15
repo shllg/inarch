@@ -1,5 +1,5 @@
 /**
- * `graft grep` core: regex search over the graph's indexed files, with hits
+ * `inarch grep` core: regex search over the graph's indexed files, with hits
  * grouped by their innermost enclosing symbol and ranked by incoming-edge
  * count (coupling) — a grep that answers "which of these hits matters",
  * because plain `grep -rn` gives no way to tell a hit inside a

@@ -36,19 +36,19 @@ export function underGraft(dir: string, file: string): boolean {
  * the installed hook entries carry. */
 const CHILD_TIMEOUT_MS = 8000;
 /** Headroom left for the hook's own work (read stdin, score, write session, emit)
- * after its `graft ask` child returns. */
+ * after its `inarch ask` child returns. */
 const HOOK_OVERHEAD_MS = 2000;
 /** Floor, so a hand-edited tiny timeout can't leave the child no time at all. */
 const MIN_CHILD_TIMEOUT_MS = 4000;
 
 /**
- * How long the prompt hook may let `graft ask` run — derived from the budget that is
+ * How long the prompt hook may let `inarch ask` run — derived from the budget that is
  * *actually installed* in this repo's `.claude/settings.json`, not from what the
  * current version of `settings-merge.ts` would install.
  *
- * A query now brings the graph up to date first, so `graft init` raises the
+ * A query now brings the graph up to date first, so `inarch init` raises the
  * UserPromptSubmit budget to 15s to cover the one cold rebuild after an upgrade. But
- * `mergeGraftSettings` only runs during `graft init` — upgrading the npm package does
+ * `mergeGraftSettings` only runs during `inarch init` — upgrading the npm package does
  * not re-run it. So every repo wired before that change keeps `"timeout": 8000`, and
  * hard-coding a 13s child there means Claude Code kills the hook first: `emit()` and
  * `writeSession()` never run, the turn gets no retrieval pack at all, and the SIGKILLed
@@ -118,7 +118,7 @@ function installedHookTimeout(dir: string, event: string): number | null {
 }
 
 /**
- * Append `--dir <contextDir>` for the hooks' own `graft ask`/`graft check`
+ * Append `--dir <contextDir>` for the hooks' own `inarch ask`/`inarch check`
  * children — the one place in this file that spawns the CLI itself rather
  * than reading `graft/` off disk (which already resolves through
  * `resolveContextDir` inside `util/state.ts` and `claude/stats.ts`). A no-op
@@ -132,7 +132,7 @@ function withContextDirArg(dir: string, args: string[]): string[] {
 function graftJson(dir: string, args: string[], timeout: number = CHILD_TIMEOUT_MS): any | null {
   try {
     // GRAFT_TEST_CLI is a test seam (mirrors GRAFT_TEST_STDIN/GRAFT_TEST_SYNC_RUN) so
-    // tests can point the prompt hook's `graft ask`/`graft check` calls at a stub
+    // tests can point the prompt hook's `inarch ask`/`inarch check` calls at a stub
     // script and observe the exact args it was invoked with, instead of shelling
     // out to the real CLI (which isn't built relative to the TS source under test).
     const cliPath = process.env.GRAFT_TEST_CLI ?? graftCliPath();
@@ -140,7 +140,7 @@ function graftJson(dir: string, args: string[], timeout: number = CHILD_TIMEOUT_
       { cwd: dir, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'] });
     return JSON.parse(out);
   } catch (e: any) {
-    // `graft check` exits non-zero when the graph is stale (by design) but still
+    // `inarch check` exits non-zero when the graph is stale (by design) but still
     // prints valid JSON to stdout; recover it from the thrown error before giving up.
     if (e && typeof e.stdout === 'string' && e.stdout.trim()) {
       try { return JSON.parse(e.stdout); } catch { /* not JSON — fall through */ }
@@ -430,7 +430,7 @@ export async function main(event: string): Promise<void> {
     // Pointers-only, small, gated. No --source: per-prompt injected tokens are
     // fresh full-price input on every turn (unlike the cached SessionStart
     // orientation), so the pack carries locators, never inlined code — the agent
-    // pulls spans itself via `graft ask --source` when a pointer looks right.
+    // pulls spans itself via `inarch ask --source` when a pointer looks right.
     // relevantRetrieval then drops the pack entirely when the prompt barely
     // overlaps the top hit or when every hit was already injected this session.
     const askArgs = withContextDirArg(dir, ['ask', prompt, '.', '--json', '-n', '3']);

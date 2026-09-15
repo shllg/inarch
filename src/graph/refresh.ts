@@ -2,7 +2,7 @@
  * `ensureFreshGraph` — the pre-query gate that keeps retrieval honest.
  *
  * Freshness used to be someone else's job: the Claude Code `Stop` hook spawned a
- * background `graft build` *after* the turn ended, so every query an agent made
+ * background `inarch build` *after* the turn ended, so every query an agent made
  * between its first edit and the end of the turn answered from a graph that no
  * longer matched the file it had just changed. Worse, an edit made outside the
  * agent (your editor, a branch switch, a stash) set no `dirty` flag at all, so
@@ -21,7 +21,7 @@
  *   rebuilds on top of each other.
  * - **Writes only what a query reads** (`graphOnly`): the graph, the `ask` sidecar,
  *   the freshness record. Not the markdown cards, not `INDEX.md`, not `.gitignore`.
- *   Those belong to an explicit `graft build` — which the `Stop` hook already runs
+ *   Those belong to an explicit `inarch build` — which the `Stop` hook already runs
  *   at the end of a turn — so retrieval stays cheap and a read stays a read. It
  *   also leaves `stats.json` alone, so that same `Stop` hook still sees `dirty` and
  *   still rebuilds the passive surface.
@@ -79,7 +79,7 @@ function sleep(ms: number): Promise<void> {
  * Release the lock if this process is asked to die while holding it. Returns the
  * un-hook.
  *
- * Not hypothetical: the Claude Code prompt hook runs `graft ask` with a timeout, and
+ * Not hypothetical: the Claude Code prompt hook runs `inarch ask` with a timeout, and
  * `execFileSync` enforces it with SIGTERM. Node's default disposition for SIGTERM is
  * to exit without unwinding, so the `finally` below never runs and the lock outlives
  * the process — after which the background sync is blocked and every query waits and
@@ -171,7 +171,7 @@ export async function ensureFreshGraph(root: string, opts: RefreshOptions = {}):
       seededFrom = seed.from;
       // Still nothing (not a worktree, parent never built, or a concurrent seed we
       // lost the race for and which we now re-check for): the caller's own "no graph
-      // — run graft build" message is the right answer. Auto-building a whole repo
+      // — run inarch build" message is the right answer. Auto-building a whole repo
       // under a query is a surprise, and it's the one case where the user hasn't
       // opted into graft at all yet.
       if (!existsSync(wiringPath(outDir))) {

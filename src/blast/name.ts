@@ -268,7 +268,7 @@ export async function applyNames(
  * Everything here is best-effort by construction: no key, a spent quota or a
  * refused call leaves the backstop labels in place, because neither a PR check
  * nor a review comment should fail over a cosmetic layer. The note comes back
- * rather than going to a stream, so `graft blast --name` can prefix it and the
+ * rather than going to a stream, so `inarch blast --name` can prefix it and the
  * App can log it against the pull request it belongs to.
  */
 export async function nameReport(

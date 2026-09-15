@@ -35,7 +35,7 @@ export const MAX_FILE_BYTES = 1_000_000;
  * git-child discovery in `graph/scopes.ts` share it, so they can never
  * independently drift on what counts as skippable.
  *
- * `includes` is the explicit, per-repo `graft build --include-dir` override
+ * `includes` is the explicit, per-repo `inarch build --include-dir` override
  * (persisted via `util/state.ts`'s `readIncludeDirs`, threaded in by each
  * caller) — a name in it is removed from the effective skip set for THIS
  * repo's walks. Absent/empty ≡ today's default behavior. It lifts only

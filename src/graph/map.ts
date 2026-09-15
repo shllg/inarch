@@ -1,5 +1,5 @@
 /**
- * `graft map` core: a deterministic, token-budgeted repo orientation —
+ * `inarch map` core: a deterministic, token-budgeted repo orientation —
  * directory clusters, per-directory hubs, and global hotspots — computed
  * purely from the wiring graph (no LLM, no I/O beyond the already-loaded
  * `GraphV1`).
@@ -105,8 +105,8 @@ function dirKey(path: string, depth: number): string {
 }
 
 /** Incoming WALK_RELATIONS edge count per target id — the same "coupling"
- * metric `grep.ts` uses, so a hub in `graft map` means the same thing as a
- * high-inDegree group in `graft grep`. */
+ * metric `grep.ts` uses, so a hub in `inarch map` means the same thing as a
+ * high-inDegree group in `inarch grep`. */
 function computeInDegree(graph: GraphV1): Map<string, number> {
   const deg = new Map<string, number>();
   for (const e of graph.edges) {

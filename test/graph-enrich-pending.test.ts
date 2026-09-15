@@ -1,7 +1,7 @@
 /**
- * #172: `graft build --deep` can finish with every node still `pending` when the
+ * #172: `inarch build --deep` can finish with every node still `pending` when the
  * meaning pass gets an empty reply (no tool call / no symbols) — and re-running
- * does not clear it, while `graft check` only says "run --deep".
+ * does not clear it, while `inarch check` only says "run --deep".
  *
  * The #127 gate already catches thrown provider errors; this covers the silent
  * empty-success path that left CI stuck on an unresolvable check note.
@@ -128,7 +128,7 @@ test("#172: check names pending nodes and does not pretend re-running --deep alw
   const report = formatGraphCheckReport(r);
   assert.match(report, /src\/calc\.py#add/);
   assert.match(report, /pending/);
-  // Must not be the old dead-end that only says "run graft build --deep".
+  // Must not be the old dead-end that only says "run inarch build --deep".
   assert.match(report, /already|failed|errors|meaning pass/i);
 });
 

@@ -203,7 +203,7 @@ test("PHP extraction: trait use and typed-parameter receiver binding", async () 
 // A variable-assigned closure is named after its variable, so its node id is
 // `…#<var>`. If that name is recomputed as the anonymous `{closure}` on a later
 // pass, the stored id and the recomputed id disagree — the exact drift that made
-// `graft check` report STALE on closure-heavy PHP right after a clean build
+// `inarch check` report STALE on closure-heavy PHP right after a clean build
 // (reported against this branch on a ~2k-file Laravel repo). These closures are
 // shaped like that report: a top-level `static function … use (…)` and a
 // variable-assigned closure nested inside a method.
@@ -257,7 +257,7 @@ test("PHP closures: closure names are stable across repeated extraction", () => 
   }
 });
 
-test("PHP closures: `graft check` stays fresh after build (no name drift)", async () => {
+test("PHP closures: `inarch check` stays fresh after build (no name drift)", async () => {
   const dir = makeClosureFixture();
   try {
     await buildGraph(dir);

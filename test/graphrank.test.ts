@@ -1,5 +1,5 @@
 /**
- * Tests for the graph-rank re-ranking stage of `graft ask`.
+ * Tests for the graph-rank re-ranking stage of `inarch ask`.
  *
  * The unit tests exercise {@link personalizedPageRank} directly on hand-built
  * graphs; the integration tests drive the whole `ask` path on real fixtures

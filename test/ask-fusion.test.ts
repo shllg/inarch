@@ -1,7 +1,7 @@
 /**
  * Pure tests for `fuseScopes` (src/ask/fuse.ts) — per-scope ranking +
  * reciprocal-rank fusion. No fs, no graph build: these pin the fusion math
- * that keeps a big sub-project from drowning a small one in `graft ask`.
+ * that keeps a big sub-project from drowning a small one in `inarch ask`.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";

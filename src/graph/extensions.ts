@@ -111,7 +111,7 @@ function destination(path: string): string {
 }
 
 function stateDirectory(repo: string, options: ExtensionOptions): string {
-  const base = resolve(options.stateDir ?? process.env.GRAFT_EXTENSION_STATE_DIR ?? join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "graft", "extensions"));
+  const base = resolve(options.stateDir ?? process.env.GRAFT_EXTENSION_STATE_DIR ?? join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "inarch", "extensions"));
   if (inside(repo, base)) throw new Error("extension approval state must be outside the repository");
   const state = destination(base);
   if (inside(repo, state)) throw new Error("extension approval state must be outside the repository");
@@ -267,7 +267,7 @@ export function listExtensions(root: string, options: ExtensionOptions = {}): Ex
   return grants(repo, options).map((g) => {
     try {
       const digest = packageDigest(packageSnapshot(g.path), g.config);
-      return { ...g, status: digest === g.digest ? "ready" : "changed", ...(digest === g.digest ? {} : { reason: "package changed; run graft ext allow again" }) };
+      return { ...g, status: digest === g.digest ? "ready" : "changed", ...(digest === g.digest ? {} : { reason: "package changed; run inarch ext allow again" }) };
     } catch (e) {
       return { ...g, status: existsSync(g.path) ? "invalid" : "missing", reason: errorText(e) };
     }

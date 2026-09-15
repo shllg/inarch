@@ -67,7 +67,7 @@ test("follow-submodules is opt-in, persisted for MCP refresh, and explicitly rev
     assert.ok(!defaultGraph.nodes.some((node) => node.path.startsWith("modules/child/")));
     assert.ok(!defaultGraph.nodes.some((node) => node.path.startsWith("build/")));
     assert.equal(
-      existsSync(join(parent, ".graft", "config.json")),
+      existsSync(join(parent, ".inarch", "config.json")),
       false,
       "an implicit default must not create local config",
     );

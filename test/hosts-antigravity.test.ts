@@ -40,14 +40,14 @@ test("Antigravity MCP registers in ~/.gemini/config/mcp_config.json (global, mcp
   assert.equal(t.topKey, 'mcpServers');
 });
 
-test("Antigravity skill lands in ~/.gemini/skills/graft/SKILL.md, idempotently", () => {
+test("Antigravity skill lands in ~/.gemini/skills/inarch/SKILL.md, idempotently", () => {
   const home = fresh();
   const [target] = antigravitySkillTargets(home);
-  assert.equal(target.path, join(home, '.gemini', 'skills', 'graft', 'SKILL.md'));
+  assert.equal(target.path, join(home, '.gemini', 'skills', 'inarch', 'SKILL.md'));
 
   const first = installAntigravitySkill(home);
   assert.equal(first[0].action, 'created');
-  assert.ok(existsSync(target.path) && readFileSync(target.path, 'utf8').includes('graft ask'));
+  assert.ok(existsSync(target.path) && readFileSync(target.path, 'utf8').includes('inarch ask'));
   const second = installAntigravitySkill(home);
   assert.equal(second[0].action, 'unchanged', 're-run is a no-op');
 });
@@ -57,9 +57,9 @@ test("runHostsInit --agents antigravity writes AGENTS.md + MCP + skill", () => {
   mkdirSync(join(home, '.gemini', 'config'), { recursive: true });
   const r = runHostsInit(repo, { agents: ['antigravity'], home });
   assert.deepEqual(r.written.map((w) => w.id), ['antigravity']);
-  assert.ok(readFileSync(join(repo, 'AGENTS.md'), 'utf8').includes('graft ask'), 'AGENTS.md written');
+  assert.ok(readFileSync(join(repo, 'AGENTS.md'), 'utf8').includes('inarch ask'), 'AGENTS.md written');
   assert.ok(r.mcp.some((w) => w.path.endsWith(join('.gemini', 'config', 'mcp_config.json'))), 'MCP registered');
-  assert.ok(r.hooks.some((w) => w.path.endsWith(join('skills', 'graft', 'SKILL.md'))), 'skill placed');
+  assert.ok(r.hooks.some((w) => w.path.endsWith(join('skills', 'inarch', 'SKILL.md'))), 'skill placed');
   // --no-global suppresses the two global writes (MCP + skill), keeps AGENTS.md
   const noGlobal = runHostsInit(fresh(), { agents: ['antigravity'], home: fresh(), global: false });
   assert.equal(noGlobal.mcp.length, 0, 'no MCP write under --no-global');

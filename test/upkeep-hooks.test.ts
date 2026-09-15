@@ -11,7 +11,7 @@ import { main } from '../src/claude/hooks.js';
 import { readStamp, runningVersion } from '../src/upkeep.js';
 import { tmpRepo } from './helpers.js';
 
-/** A repo that looks like a previous `graft init` ran here, with no stamp — i.e.
+/** A repo that looks like a previous `inarch init` ran here, with no stamp — i.e.
  * wired by a graft old enough not to have written one. */
 function wiredRepo(tag: string): string {
   const repo = tmpRepo(tag);
@@ -65,7 +65,7 @@ test('session-start refreshes stale wiring and stamps it', async () => {
   assert.match(ctx, /written by unwired, now /);
   // The wiring was actually re-written, not just announced.
   assert.ok(existsSync(join(repo, '.claude', 'settings.json')));
-  assert.ok(existsSync(join(repo, '.claude', 'skills', 'graft', 'SKILL.md')));
+  assert.ok(existsSync(join(repo, '.claude', 'skills', 'inarch', 'SKILL.md')));
   assert.equal(readStamp(repo)?.version, runningVersion());
   assert.deepEqual(readStamp(repo)?.hosts, ['claude']);
 });
