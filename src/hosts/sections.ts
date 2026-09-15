@@ -8,19 +8,6 @@ import { dirname } from 'node:path';
 export const START = '<!-- graft:start -->';
 export const END = '<!-- graft:end -->';
 
-/**
- * A brain's rules go in their OWN fenced block, not inside the instruction
- * block above.
- *
- * They have to be separately addressable: the instruction body is static and
- * rewritten by `init`, while rules change whenever the brain does and are
- * refreshed on their own. One pair of markers for both would mean every rules
- * refresh rewrites the instructions too, and `graft uninstall` could not remove
- * one without the other.
- */
-export const BRAIN_START = '<!-- graft:brain:start -->';
-export const BRAIN_END = '<!-- graft:brain:end -->';
-
 /** One addressable managed region in a file the user owns. */
 export interface Markers {
   start: string;
@@ -28,10 +15,11 @@ export interface Markers {
 }
 
 export const GRAFT_MARKERS: Markers = { start: START, end: END };
-export const BRAIN_MARKERS: Markers = { start: BRAIN_START, end: BRAIN_END };
 
-/** Every managed region graft may own in a user-owned file. */
-export const ALL_MARKERS: Markers[] = [GRAFT_MARKERS, BRAIN_MARKERS];
+/** Every managed region graft may own in a user-owned file. The list outlives
+ * the hosted rules block it was introduced for: `uninstall` walks whatever is
+ * in it, so a second managed region can be added without touching retract. */
+export const ALL_MARKERS: Markers[] = [GRAFT_MARKERS];
 
 export type UpsertAction = 'created' | 'appended' | 'replaced' | 'unchanged';
 

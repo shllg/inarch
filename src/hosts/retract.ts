@@ -133,9 +133,9 @@ function pruneEmptyDirs(dir: string): void {
 function stripSection(path: string, apply: boolean, markers: Markers[] = ALL_MARKERS): RetractAction {
   if (!existsSync(path)) return 'absent';
   const text = readFileSync(path, 'utf8');
-  // Every region graft may own, not just the instruction block. A file can hold
-  // both the instructions and a brain's rules, and leaving one behind would
-  // strand rules in a repo the user has uninstalled graft from.
+  // Every region graft may own, not just the instruction block: a file may hold
+  // more than one, and leaving one behind strands it in a repo the user has
+  // uninstalled graft from.
   if (!markers.some((m) => text.includes(m.start))) return 'absent';
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const lines = text.split(/\r\n|\n/);
