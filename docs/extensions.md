@@ -10,12 +10,12 @@ Keep each extension in a dedicated directory. Its entry must be an ES module
 (`.mjs` or `.js`); use relative imports for helpers in that directory.
 
 ```sh
-graft ext allow /path/to/extension/entry.mjs /path/to/repo --config /path/to/config.json
-graft ext list /path/to/repo
-graft build /path/to/repo --dry-run
-graft build /path/to/repo
-graft ext status /path/to/repo --json
-graft ext revoke <id-or-entry-path> /path/to/repo
+inarch ext allow /path/to/extension/entry.mjs /path/to/repo --config /path/to/config.json
+inarch ext list /path/to/repo
+inarch build /path/to/repo --dry-run
+inarch build /path/to/repo
+inarch ext status /path/to/repo --json
+inarch ext revoke <id-or-entry-path> /path/to/repo
 ```
 
 Approval covers the canonical repository path, entry path, every included module
@@ -190,8 +190,8 @@ not loaded automatically — it is granted by path like any other package, and i
 own README documents its configuration.
 
 ```sh
-graft ext allow extensions/rails-seam/extension.mjs . --config rails.json
-graft ext allow extensions/rails-seam/runtime.mjs   . --config rails.json
+inarch ext allow extensions/rails-seam/extension.mjs . --config rails.json
+inarch ext allow extensions/rails-seam/runtime.mjs   . --config rails.json
 ```
 
 It exists because an extension API is only as good as the hardest consumer
