@@ -699,7 +699,9 @@ program
       if (!g.missing) console.log("\n" + formatGraphCheckReport(g));
     }
 
-    if (bothMissing || markdownFail || wiringFail) process.exit(1);
+    // Large JSON drift reports are buffered when stdout is a pipe. An immediate
+    // exit truncates them, hiding the stale result from callers that parse JSON.
+    if (bothMissing || markdownFail || wiringFail) process.exitCode = 1;
   });
 
 program

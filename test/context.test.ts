@@ -475,6 +475,19 @@ test("check cannot certify extension contributions when their fingerprint is mis
   }
 });
 
+test("graft check --json flushes a large stale report before exiting nonzero", () => {
+  const dir = mkdtempSync(join(tmpdir(), "graft-check-json-"));
+  try {
+    const file = join(dir, "many.ts");
+    writeFileSync(file, "export function original() {}\n");
+    assert.equal(runCli(["build", dir]).status, 0);
+    writeFileSync(file, readFileSync(file, "utf8") + Array.from({ length: 1500 }, (_, i) => `export function added_${"long_name_".repeat(8)}${i}() {}\n`).join(""));
+    const result = runCli(["check", dir, "--json"]);
+    assert.equal(result.status, 1);
+    assert.equal(JSON.parse(result.stdout).graph.added.length, 1500);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 // ensureGitignored — every `graft build` self-ignores its regenerable graph dir.
 test("ensureGitignored: creates .gitignore with the graft/ entry when none exists", () => {
   const dir = mkdtempSync(join(tmpdir(), "ctxgi-"));

@@ -92,6 +92,12 @@ test('TOOLS lists the six tools with schemas', async () => {
   assert.ok('direction' in props, 'graft_trace_calls schema should document `direction`');
   assert.ok('depth' in props, 'graft_trace_calls schema should document `depth`');
   assert.match(callers.description, /conditional|async/i, 'trace guidance names relationships that are not unconditional runtime calls');
+  const find = TOOLS.find((t) => t.name === 'graft_find_code')!;
+  const findProps = (find.inputSchema as { properties: Record<string, { type?: string }> }).properties;
+  assert.equal(findProps.limit.type, 'integer', 'the native schema agrees with the adapter’s integer contract');
+  const map = TOOLS.find((t) => t.name === 'graft_repo_map')!;
+  const mapProps = (map.inputSchema as { properties: Record<string, { type?: string }> }).properties;
+  assert.equal(mapProps.max_dirs.type, 'integer');
 });
 
 test('graft_find_code returns ranked hits for a built repo', async () => {
@@ -119,6 +125,39 @@ test('graft_check_freshness reports the wiring state', async () => {
   const r = await callTool(d, 'graft_check_freshness', {});
   assert.equal(r.isError, false);
   assert.match(r.text, /graph check: OK/);
+});
+
+test('graft_check_freshness distinguishes an optional missing deep context manifest from a fresh wiring graph', async () => {
+  const d = builtRepo();
+
+  const r = await callTool(d, 'graft_check_freshness', {});
+  assert.equal(r.isError, false);
+  assert.match(r.text, /context cards: not built \(optional deep layer;/);
+  assert.match(r.text, /graph check: OK/);
+  assert.doesNotMatch(r.text, /NO GRAPH/, 'a missing optional context manifest must not make the fresh graph report misleading');
+});
+
+test('graft_check_freshness reports a missing structural graph even when context cards are also absent', async () => {
+  const bare = mkdtempSync(join(tmpdir(), 'graft-mcptools-no-graph-'));
+  const r = await callTool(bare, 'graft_check_freshness', {});
+  assert.equal(r.isError, true);
+  assert.match(r.text, /context cards: not built \(optional deep layer;/);
+  assert.match(r.text, /graph check: NO GRAPH/);
+});
+
+test('graft_check_freshness reports a missing structural graph when optional context cards exist', async () => {
+  const bare = mkdtempSync(join(tmpdir(), 'graft-mcptools-cards-no-graph-'));
+  const context = join(bare, 'context');
+  mkdirSync(context);
+  writeFileSync(
+    join(context, 'manifest.json'),
+    JSON.stringify({ version: 1, model: 'test', repoDigest: '', files: [], nodes: [] }),
+  );
+  const r = await callTool(bare, 'graft_check_freshness', {}, context);
+  assert.equal(r.isError, true);
+  assert.match(r.text, /graft check: OK/);
+  assert.match(r.text, /graph check: NO GRAPH/);
+  assert.doesNotMatch(r.text, /context cards: not built/);
 });
 
 test('graft_trace_calls with depth names dependents of a file (blast radius)', async () => {

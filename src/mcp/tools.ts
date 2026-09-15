@@ -43,15 +43,15 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'graft_find_code',
     description:
-      'Query the repo context graph in plain words. Returns ranked nodes with exact file:line spans and the relevant source inlined — usually the full answer, no file reads needed.',
+      'Query the repo context graph in plain words. Returns ranked definitions with exact file:line spans and bounded relevant source excerpts. Verify the selected source when the excerpt does not establish the behavior.',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'what you want to understand, in plain words' },
-        limit: { type: 'number', description: 'max results (default 5)' },
+        limit: { type: 'integer', minimum: 1, description: 'max results (default 5)' },
         full: {
           type: 'boolean',
-          description: 'inline whole definition spans instead of the default ≤8-line crux excerpts',
+          description: 'inline definition spans up to 80 lines instead of the default ≤8-line excerpts',
         },
         in: {
           type: 'string',
@@ -91,7 +91,7 @@ export const TOOLS: ToolDef[] = [
           enum: ['in', 'out'],
           description: '"in" (default) = callers/dependents; "out" = callees/dependencies',
         },
-        depth: { description: 'transitive walk depth for blast radius (default 1 = direct edges only); pass "all" for the full connected closure — every source that would be affected' },
+        depth: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'string', enum: ['all'] }], description: 'transitive walk depth (default 1 = direct edges only); pass "all" for the indexed closure' },
         in: { type: 'string', description: 'narrow matches to nodes at or under this repo-relative path prefix, e.g. server/src' },
       },
       required: ['symbol'],
@@ -119,7 +119,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        max_dirs: { type: 'number', description: 'max directory entries shown, rest counted into dropped (default 16)' },
+        max_dirs: { type: 'integer', minimum: 1, description: 'max directory entries shown, rest counted into dropped (default 16)' },
       },
     },
   },
@@ -273,9 +273,13 @@ async function callSingleTool(
         const engine = new Graft({ contextDir: dirOverride });
         const r = engine.check(root);
         const g = await engine.checkGraph(root);
-        const parts = [formatCheckReport(r)];
-        if (!g.missing) parts.push(formatGraphCheckReport(g));
-        return { text: parts.join('\n\n'), isError: g.extensionHealth?.ok === false };
+        const parts = [
+          r.missing
+            ? 'context cards: not built (optional deep layer; run `graft build --deep` to generate them).'
+            : formatCheckReport(r),
+        ];
+        parts.push(formatGraphCheckReport(g));
+        return { text: parts.join('\n\n'), isError: g.missing || g.extensionHealth?.ok === false };
       }
       case 'graft_trace_calls': {
         // One tool covers callers (direction:in, the default), callees

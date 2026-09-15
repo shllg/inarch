@@ -97,9 +97,15 @@ export interface AskRankingMetadata {
   baselineCoverageStrong?: number;
 }
 
-/** Max source lines to inline per hit — a definition longer than this is
- * truncated with a marker, so one giant function can't blow up the pack. */
-const MAX_SPAN_LINES = 80;
+/** The ordinary retriever is a navigation pack, not a substitute for reading a
+ * definition wholesale. A missing crux used to silently turn that pack into up
+ * to eighty source lines per result, so a broad query could spend a whole
+ * context window before the agent had chosen a candidate. Keep the default
+ * excerpt small and make the omitted definition explicit; `--full` remains a
+ * deliberate, still bounded escalation. */
+const MAX_DEFAULT_EXCERPT_LINES = 8;
+const MAX_DEFAULT_PACK_SOURCE_LINES = 40;
+const MAX_FULL_SPAN_LINES = 80;
 
 export interface AskResult {
   query: string;
@@ -1264,7 +1270,7 @@ export interface AskOptions {
    * neighbours the query didn't name. On by default; set false for pure lexical. */
   graphRank?: boolean;
   /** With `source`: inline each hit's WHOLE definition span (capped at
-   * {@link MAX_SPAN_LINES}) instead of the default crux-first slice. The
+   * {@link MAX_FULL_SPAN_LINES}) instead of the default crux-first slice. The
    * default inlines the ≤8-line LLM-chosen crux when a node has one — the
    * decision point, ~10× cheaper than the full span — and the pack marks each
    * crux so the agent knows `--full` (or the file itself) has the rest. */
@@ -1297,9 +1303,9 @@ function parseSpan(pointer: string): { path: string; from: number; to: number } 
   return { path: m[1], from: Number(m[2]), to: Number(m[3]) };
 }
 
-/** Read the source lines [from, to] (1-indexed, inclusive) of `path` under `root`,
- * capped at {@link MAX_SPAN_LINES}. Returns null if the file can't be read. */
-function sliceSpan(root: string, path: string, from: number, to: number): string | null {
+/** Read a whole definition as the explicit `--full` escalation. It remains
+ * bounded so one unusually large definition cannot exhaust an MCP response. */
+function sliceFullSpan(root: string, path: string, from: number, to: number): string | null {
   try {
     const source = readSourceFile(join(root, path));
     if (source === null) return null; // unsupported encoding (e.g. UTF-16BE)
@@ -1307,12 +1313,56 @@ function sliceSpan(root: string, path: string, from: number, to: number): string
     const start = Math.max(1, from);
     const end = Math.min(lines.length, to);
     const slice = lines.slice(start - 1, end);
-    if (slice.length > MAX_SPAN_LINES) {
-      const head = slice.slice(0, MAX_SPAN_LINES);
-      head.push(`… (+${slice.length - MAX_SPAN_LINES} more lines; open ${path}:L${start}-L${end})`);
+    if (slice.length > MAX_FULL_SPAN_LINES) {
+      const head = slice.slice(0, MAX_FULL_SPAN_LINES);
+      head.push(`… (+${slice.length - MAX_FULL_SPAN_LINES} more lines; open ${path}:L${start}-L${end})`);
       return head.join("\n");
     }
     return slice.join("\n");
+  } catch {
+    return null;
+  }
+}
+
+/** Select a deterministic small source window. A query-term line wins; ties
+ * retain source order. When the query only matched graph metadata, the window
+ * begins at the signature so the result is still a useful locator. */
+function sliceDefaultExcerpt(
+  root: string,
+  path: string,
+  from: number,
+  to: number,
+  query: string,
+): string | null {
+  try {
+    const source = readSourceFile(join(root, path));
+    if (source === null) return null;
+    const lines = source.split("\n");
+    const start = Math.max(1, from);
+    const end = Math.min(lines.length, to);
+    const span = lines.slice(start - 1, end);
+    if (span.length <= MAX_DEFAULT_EXCERPT_LINES) return span.join("\n");
+
+    const terms = new Set(tokenize(query));
+    let bestIndex = 0;
+    let bestScore = 0;
+    for (let i = 0; i < span.length; i++) {
+      const score = new Set(tokenize(span[i]).filter((term) => terms.has(term))).size;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    }
+    const windowStart = Math.min(
+      Math.max(0, bestIndex - Math.floor(MAX_DEFAULT_EXCERPT_LINES / 2)),
+      span.length - MAX_DEFAULT_EXCERPT_LINES,
+    );
+    const excerpt = span.slice(windowStart, windowStart + MAX_DEFAULT_EXCERPT_LINES);
+    const omitted = span.length - excerpt.length;
+    excerpt.push(
+      `… (excerpt only; ${omitted} definition lines omitted; rerun with --full before relying on whole-definition behavior)`,
+    );
+    return excerpt.join("\n");
   } catch {
     return null;
   }
@@ -1323,23 +1373,33 @@ function sliceSpan(root: string, path: string, from: number, to: number): string
  * `full` is off, inline that ≤8-line excerpt (with an escalation marker) rather
  * than the whole definition — most hits only need the decision point, and the
  * marker tells the agent exactly how to get the rest when this one doesn't. */
-function inlineSource(root: string, hits: AskHit[], graph: GraphV1 | null, full: boolean): void {
+function inlineSource(root: string, hits: AskHit[], graph: GraphV1 | null, full: boolean, query: string): number {
   const cruxByPointer = new Map<string, string>();
   if (!full && graph) {
     for (const n of graph.nodes)
       if (n.crux?.code) cruxByPointer.set(`${n.path}:${n.span}`, n.crux.code);
   }
+  let remaining = full ? Number.POSITIVE_INFINITY : MAX_DEFAULT_PACK_SOURCE_LINES;
+  let omitted = 0;
   for (const h of hits) {
     const s = parseSpan(h.pointer);
     if (!s) continue;
     const crux = cruxByPointer.get(h.pointer);
-    if (crux) {
-      h.code = `${crux}\n… (crux — full definition at ${h.pointer}; rerun with --full)`;
+    const code = crux
+      ? `${crux}\n… (crux — full definition at ${h.pointer}; rerun with --full)`
+      : full
+        ? sliceFullSpan(root, s.path, s.from, s.to)
+        : sliceDefaultExcerpt(root, s.path, s.from, s.to, query);
+    if (!code) continue;
+    const lines = code.split("\n").length;
+    if (lines > remaining) {
+      omitted++;
       continue;
     }
-    const code = sliceSpan(root, s.path, s.from, s.to);
-    if (code) h.code = code;
+    h.code = code;
+    remaining -= lines;
   }
+  return omitted;
 }
 
 /** Every repo-relative file path a set of hits points into (dedup). A symbol
@@ -1424,7 +1484,11 @@ export function ask(dir: string, query: string, opts: AskOptions = {}): AskResul
     );
   }
   if (opts.source) {
-    inlineSource(root, result.hits, corpus.graph, opts.full ?? false);
+    const omitted = inlineSource(root, result.hits, corpus.graph, opts.full ?? false, query);
+    if (omitted > 0) {
+      const note = `source excerpts omitted for ${omitted} lower-ranked hit${omitted === 1 ? "" : "s"} to keep this ordinary pack bounded; ranked file:line locators remain. Rerun with a smaller limit or --full to inspect a definition.`;
+      result.note = result.note ? `${result.note}\n${note}` : note;
+    }
     if (result.ranking) {
       const internalHits = [
         ...result.ranking.groups.flatMap((group) => group.hits),
@@ -1436,6 +1500,7 @@ export function ask(dir: string, query: string, opts: AskOptions = {}): AskResul
         [...new Set(internalHits)],
         corpus.graph,
         opts.full ?? false,
+        query,
       );
     }
     // The pack is truly substitutive only in retriever mode (spans inlined), so

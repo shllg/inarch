@@ -164,6 +164,53 @@ test("ask --source falls back to the span when a node has no crux", async () => 
   }
 });
 
+test("ask --source without a crux returns a bounded query-relevant excerpt and marks omitted definition lines", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "graft-ask-bounded-excerpt-"));
+  try {
+    const filler = Array.from({ length: 100 }, (_, i) => `  const filler${i} = ${i};\n`).join("");
+    writeFileSync(
+      join(dir, "search.ts"),
+      `export function configureSearch(): string {\n${filler}  return "needle behavior";\n}\n`,
+    );
+    await buildGraph(dir);
+
+    const hit = ask(dir, "needle behavior", { source: true }).hits.find((h) => h.title.startsWith("configureSearch"))!;
+    assert.match(hit.code!, /return "needle behavior"/, "the excerpt centers a matching source line");
+    assert.match(hit.code!, /excerpt only.*lines omitted.*rerun with --full/i, "the pack never presents the excerpt as whole-definition semantics");
+    assert.ok(hit.code!.split("\n").length <= 9, "the default excerpt is at most eight source lines plus its marker");
+
+    const full = ask(dir, "needle behavior", { source: true, full: true }).hits.find((h) => h.title.startsWith("configureSearch"))!;
+    assert.match(full.code!, /\+\d+ more lines; open search\.ts:L1-L\d+/, "full remains an explicit but bounded escalation");
+    assert.ok(full.code!.split("\n").length <= 81, "the full escalation is capped at eighty source lines plus its marker");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ask --source retains ranked locators when the ordinary pack reaches its aggregate excerpt budget", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "graft-ask-pack-budget-"));
+  try {
+    for (let i = 0; i < 10; i++) {
+      writeFileSync(
+        join(dir, `match-${i}.ts`),
+        `export function result${i}(): string {\n` +
+          Array.from({ length: 10 }, (_, line) => `  const value${line} = "packedneedle";\n`).join("") +
+          `  return "packedneedle";\n}\n`,
+      );
+    }
+    await buildGraph(dir);
+
+    const result = ask(dir, "packedneedle", { source: true, limit: 10 });
+    assert.equal(result.hits.length, 10, "the ranked identity and caller-requested scope stay intact");
+    assert.ok(result.hits.every((hit) => /match-\d+\.ts:L/.test(hit.pointer)), "every selected result remains a usable locator");
+    assert.match(result.note ?? "", /source excerpts omitted for \d+ lower-ranked hit/, "the aggregate omission is explicit");
+    const inlinedLines = result.hits.reduce((total, hit) => total + (hit.code?.split("\n").length ?? 0), 0);
+    assert.ok(inlinedLines <= 40, "ordinary packs cap aggregate inlined source at forty lines");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("skeleton lists a file's definitions in span order, matches by basename", async () => {
   const dir = mkdtempSync(join(tmpdir(), "graft-skel-"));
   try {
