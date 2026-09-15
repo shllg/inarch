@@ -9,22 +9,6 @@ import { hasGraftIndex } from '../graph/root.js';
 import { mainWorktreeRoot } from '../graph/seed.js';
 import { runUpkeep } from '../upkeep-run.js';
 import { runningVersion } from '../upkeep.js';
-import { maybeFlushInBackground, track } from '../telemetry/index.js';
-
-/**
- * MCP tool name → the command enum the telemetry contract knows. A tool absent
- * here is simply not counted: `track` would drop an unlisted command anyway, and
- * mapping by hand keeps the wire vocabulary identical across the CLI and MCP so
- * `ask` means the same thing in both.
- */
-const TOOL_COMMAND: Record<string, string> = {
-  graft_find_code: 'ask',
-  graft_find_all: 'grep',
-  graft_trace_calls: 'callers',
-  graft_file_api: 'skeleton',
-  graft_repo_map: 'map',
-  graft_check_freshness: 'check',
-};
 
 function send(msg: object): void {
   process.stdout.write(`${JSON.stringify(msg)}\n`);
@@ -77,14 +61,6 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   // put them. Never blocks: the registry fetch happens in a detached child.
   const upkeep = runUpkeep(root, runningVersion()).lines;
   for (const line of upkeep) console.error(line);
-  // Same deal for the telemetry queue: flushed from a detached child at boot, so
-  // a Cursor user who never touches the CLI still gets their events out.
-  //
-  // Deliberately NOT the first-run notice. This server's stderr goes to an editor
-  // log nobody reads, so printing it here would mark the disclosure as shown
-  // without anyone having seen it. It stays pending for the next CLI command,
-  // and `graft init`'s picker is the channel that reached this user already.
-  maybeFlushInBackground();
 
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
   rl.on('line', (line) => {
@@ -129,16 +105,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         // that can reject here is a bug — surface it as a JSON-RPC error rather
         // than an unhandled rejection that kills the server.
         callTool(root, name, args, dirOverride).then(
-          (r) => {
-            // No `hit`: `isError` means the tool failed, which is not the same
-            // question as "did the graph have an answer". Absent beats wrong.
-            // hasOwn for the same reason as track()'s: a client is free to send
-            // `{"name":"constructor"}`, and a plain lookup would hand `track` a
-            // function rather than undefined.
-            const command = Object.hasOwn(TOOL_COMMAND, name) ? TOOL_COMMAND[name] : undefined;
-            track('query', { command, surface: 'mcp' }, { repo: root, host: 'mcp' });
-            reply(id, { content: [{ type: 'text', text: r.text }], isError: r.isError });
-          },
+          (r) => reply(id, { content: [{ type: 'text', text: r.text }], isError: r.isError }),
           (err) => replyError(id, -32603, err instanceof Error ? err.message : String(err)),
         );
         return;

@@ -1,14 +1,14 @@
 /**
  * The session-start hook's self-maintenance pass, end to end: it must refresh
- * wiring an older graft wrote, surface a cached upgrade nudge, and — critically —
- * never touch the network, because it runs inside Claude Code's hook timeout.
+ * wiring an older graft wrote and — critically — never touch the network,
+ * because it runs inside Claude Code's hook timeout.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { main } from '../src/claude/hooks.js';
-import { readStamp, runningVersion, updateCachePath } from '../src/upkeep.js';
+import { readStamp, runningVersion } from '../src/upkeep.js';
 import { tmpRepo } from './helpers.js';
 
 /** A repo that looks like a previous `graft init` ran here, with no stamp — i.e.
@@ -20,14 +20,9 @@ function wiredRepo(tag: string): string {
   return repo;
 }
 
-/** A fake home carrying a pre-populated update cache, so nothing has to fetch. */
-function homeWithCache(tag: string, latest: string | null, ageMs = 0): string {
-  const home = tmpRepo(tag);
-  writeFileSync(
-    (mkdirSync(join(home, '.graft'), { recursive: true }), updateCachePath(home)),
-    JSON.stringify({ latest, checkedAt: Date.now() - ageMs }),
-  );
-  return home;
+/** A fake home for the hook to resolve machine-global paths against. */
+function fakeHome(tag: string): string {
+  return tmpRepo(tag);
 }
 
 /** Runs the hook in-process with stdin/home/project-dir stubbed, returns stdout. */
@@ -64,7 +59,7 @@ function contextOf(stdout: string): string {
 
 test('session-start refreshes stale wiring and stamps it', async () => {
   const repo = wiredRepo('hook-refresh');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-refresh-home', null)));
+  const ctx = contextOf(await runHook('session-start', repo, fakeHome('hook-refresh-home')));
 
   assert.match(ctx, /refreshed this repo's agent wiring/);
   assert.match(ctx, /written by unwired, now /);
@@ -77,45 +72,32 @@ test('session-start refreshes stale wiring and stamps it', async () => {
 
 test('session-start says nothing on a second run — the stamp now matches', async () => {
   const repo = wiredRepo('hook-idempotent');
-  const home = homeWithCache('hook-idempotent-home', null);
+  const home = fakeHome('hook-idempotent-home');
   await runHook('session-start', repo, home);
   const ctx = contextOf(await runHook('session-start', repo, home));
   assert.doesNotMatch(ctx, /refreshed this repo's agent wiring/);
 });
 
-test('session-start surfaces a cached upgrade nudge', async () => {
-  const repo = wiredRepo('hook-nudge');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-nudge-home', '99.0.0')));
-  assert.match(ctx, /graft .* → 99\.0\.0 available/);
-  assert.match(ctx, /npm i -g @nanonets\/graft@latest/);
-});
-
-test('an up-to-date install gets no nudge', async () => {
-  const repo = wiredRepo('hook-current');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-current-home', runningVersion())));
-  assert.doesNotMatch(ctx, /available: run/);
-});
-
-test('a stale cache is used as-is: the hook never fetches', async () => {
-  // Two days old — the CLI and the MCP server refresh this, never the hook: a
-  // hook that shelled out to `npm view` would spend its whole timeout on it.
-  const repo = wiredRepo('hook-stale-cache');
-  const home = homeWithCache('hook-stale-home', '99.0.0', 2 * 24 * 60 * 60 * 1000);
+test('the hook never reaches the network', async () => {
+  // There is no registry check left to make, and no cache to read one from.
+  // The assertion is the hook's whole budget: Claude Code kills it on a timeout,
+  // so anything that shelled out to `npm view` would spend the session's first
+  // turn on it.
+  const repo = wiredRepo('hook-offline');
   const before = Date.now();
-  const ctx = contextOf(await runHook('session-start', repo, home));
-  assert.match(ctx, /99\.0\.0 available/, 'stale answer still shown rather than refetched');
+  await runHook('session-start', repo, fakeHome('hook-offline-home'));
   assert.ok(Date.now() - before < 2000, 'no network round trip');
 });
 
 test('an unwired repo is left completely alone', async () => {
   const repo = tmpRepo('hook-unwired');
-  const out = await runHook('session-start', repo, homeWithCache('hook-unwired-home', null));
+  const out = await runHook('session-start', repo, fakeHome('hook-unwired-home'));
   assert.equal(out, '', 'no INDEX.md, no wiring, nothing to say');
   assert.equal(existsSync(join(repo, '.claude')), false, 'never wires a repo that was not wired');
 });
 
-test('a nudge still lands in a wired repo with no graph built yet', async () => {
+test('upkeep still lands in a wired repo with no graph built yet', async () => {
   const repo = wiredRepo('hook-nograph');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-nograph-home', '99.0.0')));
-  assert.match(ctx, /99\.0\.0 available/, 'the no-INDEX.md path still reports upkeep');
+  const ctx = contextOf(await runHook('session-start', repo, fakeHome('hook-nograph-home')));
+  assert.match(ctx, /refreshed this repo's agent wiring/, 'the no-INDEX.md path still reports upkeep');
 });

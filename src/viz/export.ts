@@ -7,7 +7,7 @@
  * dependent symbols at exact `file:line`. Every other tool in this space solved
  * that the same way: keep a small table in the comment and link out to a hosted
  * view. Exporting rather than hosting keeps graft's promise intact — no account, no
- * server, no telemetry; the artifact is a file you can open with `file://`, publish
+ * server, nothing reported anywhere; the artifact is a file you can open with `file://`, publish
  * to GitHub Pages, or attach to a build.
  *
  * The output inlines the CSS, the bundled JS and both graphs, because a file served

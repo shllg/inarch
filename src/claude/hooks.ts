@@ -9,7 +9,6 @@ import { patchStats, readStats, acquireLock, readSession, writeSession, resolveC
 import { graftCliPath, claudeScriptPath } from './paths.js';
 import { runUpkeep } from '../upkeep-run.js';
 import { runningVersion } from '../upkeep.js';
-import { flushClosedSessions, summarizeSession } from '../telemetry/sessions.js';
 import { hasSavingsTally, lastAssistantTurn, lastTurnBilling } from './tally.js';
 import { scopeOf, scopesOfGraph } from '../graph/scopes.js';
 import { classifyToolUse, isMcpToolName, isGraftMcpTool, parseSavings, recordToolUse, type ToolKind } from './session-metrics.js';
@@ -237,8 +236,8 @@ export function lastFileScopeHint(dir: string, lastFile: string | null | undefin
  *
  *   1. Score the usage mix: classify the tool as a graft retrieval or a source
  *      read (Read/Grep/Glob) and bump the session's `graftReads`/`sourceReads`.
- *      Until this ran, those counters were never incremented, so
- *      `session_summary` telemetry shipped 0/0 for every session.
+ *      Until this ran, those counters were never incremented, so the statusline
+ *      showed 0/0 for every session.
  *   2. Sum any `[graft] tokens saved ≈ N` footers in the output into the running
  *      `savedTokens` total, so the statusline's `~N tok saved` reflects the
  *      session across CLI and MCP.
@@ -401,9 +400,6 @@ export async function main(event: string): Promise<void> {
     // background:false — a hook must never touch the network; the CLI and the MCP
     // server fill that cache, this only reads it.
     const upkeep = runUpkeep(dir, runningVersion(), { background: false }).lines;
-    // Roll up any session that ended since we were last here. Queue-only — the
-    // hook still touches no network; the CLI or the MCP server sends it later.
-    flushClosedSessions(dir);
     try {
       const idx = readFileSync(join(resolveContextDir(dir), 'INDEX.md'), 'utf8');
       const banner = staleBanner(indexFreshness(dir)) ?? undefined;
@@ -423,12 +419,6 @@ export async function main(event: string): Promise<void> {
   if (event === 'cursor-post-tool') { handleCursorPostTool(input, dir); return; }
 
   if (event === 'cursor-mcp') { handleCursorMcp(input, dir); return; }
-
-  // Cursor closes a chat: force-close THIS conversation into a bucketed
-  // `session_summary` now (its file's mtime is fresh, so the idle sweep would
-  // skip it). Attributed to Cursor. The idle sweep stays on Claude's
-  // session-start, whose Stop fires per turn and so has no real end signal.
-  if (event === 'cursor-session-end') { summarizeSession(dir, cursorSessionId(input), { host: 'cursor' }); return; }
 
   if (event === 'stop') { handleStop(input, dir); return; }
 

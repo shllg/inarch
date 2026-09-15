@@ -7,7 +7,11 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { cacheDir, readJson, writeJsonAtomic } from '../util/state.js';
-import type { AgentHost } from '../telemetry/contract.js';
+
+/** Which editor/agent graft is running under. Derived from the surface and the
+ *  wiring on disk — never from a hostname, a username, or an env var's value.
+ *  Lives here because session state is the only thing that records it. */
+export type AgentHost = 'claude-code' | 'cursor' | 'mcp' | 'cli';
 
 export {
   LOCK_STALE_MS,
@@ -65,16 +69,9 @@ export interface SessionState {
    * are sampled on different turns: the tally only on graft turns, the cost on
    * every one. */
   lastBillingUuid?: string;
-  /** Set once this session has been rolled up into a `session_summary`
-   * telemetry event, so a resumed or long-lived session is counted once.
-   * A flag rather than deleting the file: the file still holds `lastQuery` and
-   * `injectedPointers`, which a resumed session needs. */
-  summarized?: boolean;
-  /** Which host recorded this session, stamped on the first tool use. Lets the
-   * `session_summary` be attributed correctly even when Claude Code's idle sweep
-   * is what finally flushes a Cursor session. Optional: files written before
-   * host-stamping (or an empty session never touched by a tool) fall back to the
-   * flushing host. */
+  /** Which host recorded this session, stamped on the first tool use. Optional:
+   * files written before host-stamping, or an empty session never touched by a
+   * tool, carry nothing. */
   host?: AgentHost;
 }
 
@@ -88,7 +85,7 @@ export function sessionDir(d: string): string { return join(cacheDir(d), 'sessio
 function sessionPath(d: string, id: string): string { return join(sessionDir(d), `${id}.json`); }
 
 /** Every session id with a file on disk, or `[]` when none exist (never throws).
- *  Shared by the telemetry rollup and `graft stats` so they agree on the set. */
+ *  Shared by the statusline and `graft stats` so they agree on the set. */
 export function listSessionIds(d: string): string[] {
   try {
     return readdirSync(sessionDir(d)).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));

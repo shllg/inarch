@@ -6,9 +6,9 @@
  *
  * The counters (`graftReads`, `sourceReads`, `savedTokens`) already live on
  * {@link SessionState}; before this module nothing ever incremented the first
- * two, so `session_summary` telemetry shipped 0/0 for every session. Everything
- * here is a pure classify + read-modify-write over `graft/.cache/session/`, so a
- * host adapter is a few lines: parse its payload, call {@link recordToolUse}.
+ * two, so the statusline showed 0/0 for every session. Everything here is a pure
+ * classify + read-modify-write over `graft/.cache/session/`, so a host adapter is
+ * a few lines: parse its payload, call {@link recordToolUse}.
  *
  * Two payload shapes feed it, confirmed against the vendor docs rather than
  * guessed (the matcher depends on getting the names right):
@@ -33,8 +33,7 @@ import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { sumSavingsFooters } from '../context/savings.js';
 import { dollarsSaved, formatDollars } from '../context/price.js';
-import { readSession, writeSession, sessionDir, listSessionIds, type SessionState } from './state.js';
-import type { AgentHost } from '../telemetry/contract.js';
+import { readSession, writeSession, sessionDir, listSessionIds, type AgentHost, type SessionState } from './state.js';
 import { GRAFT_MCP_TOOL_NAMES } from '../mcp/tool-names.js';
 
 export type ToolKind = 'graft' | 'source';

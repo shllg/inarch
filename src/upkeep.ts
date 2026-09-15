@@ -1,38 +1,28 @@
 /**
- * Self-maintenance: keeping an installed graft, and the wiring it wrote, current.
+ * Self-maintenance: keeping the wiring an installed graft wrote current.
  *
- * Two independent kinds of staleness, both invisible to the user today:
- *
- *   1. **Binary staleness** — they installed once and never upgraded. `graft
- *      version` would tell them, but nobody runs it. So we keep a cached,
- *      machine-global registry answer and let every entry point surface a
- *      one-line nudge from it.
- *
- *   2. **Wiring staleness** — `graft init` copies hooks, shims, skill text and
- *      rule files INTO the repo. `npm i -g` replaces the binary but touches none
- *      of them, so a repo wired by 0.7 keeps 0.7's prompts and 0.7's hook
- *      timeouts forever (see the comment on `promptAskTimeout`, which exists
- *      only to work around exactly this). A version stamp written next to the
- *      graph lets any entry point notice the skew and re-run the writes.
+ * `graft init` copies hooks, shims, skill text and rule files INTO the repo.
+ * Replacing the binary touches none of them, so a repo wired by 0.7 keeps 0.7's
+ * prompts and 0.7's hook timeouts forever (see the comment on
+ * `promptAskTimeout`, which exists only to work around exactly this). A version
+ * stamp written next to the graph lets any entry point notice the skew and
+ * re-run the writes.
  *
  * Everything here is fail-soft by construction: it runs inside hooks and inside
- * the MCP server's boot path, where a throw is a broken session, and it must
- * never block on the network — the registry is only ever read from cache, and
- * the refresh happens in a detached child.
+ * the MCP server's boot path, where a throw is a broken session. It touches no
+ * network at all — the registry check that used to live here is gone with the
+ * rest of the upgrade nag.
  *
  * Called from all three hosts' entry points so no editor is left out:
  *   • Claude Code   — `session-start` hook (src/claude/hooks.ts)
  *   • Cursor/Codex  — MCP server boot (src/mcp/server.ts), and any CLI command
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { readJson, writeJsonAtomic, cacheDir } from './util/state.js';
 import { HOSTS } from './hosts/registry.js';
 import { START } from './hosts/sections.js';
-import { getNpmViewVersion, readCurrentVersion } from './cli-meta.js';
-import { graftCliPath } from './claude/paths.js';
+import { readCurrentVersion } from './cli-meta.js';
 
 /**
  * The version of the graft package this code was loaded from.
@@ -46,108 +36,6 @@ import { graftCliPath } from './claude/paths.js';
  */
 export function runningVersion(): string {
   try { return readCurrentVersion(import.meta.url); } catch { return '0.0.0'; }
-}
-
-/** How long a registry answer is considered current. A day: graft ships far less
- * often than that, and this is a nudge, not a security update. */
-export const UPDATE_TTL_MS = 24 * 60 * 60 * 1000;
-
-/* -------------------------------------------------------------------------- */
-/* version comparison                                                         */
-/* -------------------------------------------------------------------------- */
-
-/** Numeric-dotted compare of the release part only (`1.2.3-beta.1` → `1.2.3`).
- * Prerelease ordering doesn't matter here: the only question either caller asks
- * is "is the thing on npm ahead of what's on disk", and a prerelease that
- * compares equal simply produces no nudge. */
-export function compareVersions(a: string, b: string): number {
-  const parts = (v: string) => String(v).split('-')[0].split('.').map((n) => Number(n) || 0);
-  const pa = parts(a);
-  const pb = parts(b);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (d !== 0) return d < 0 ? -1 : 1;
-  }
-  return 0;
-}
-
-export function isNewer(candidate: string | null | undefined, current: string): boolean {
-  if (!candidate) return false;
-  return compareVersions(candidate, current) > 0;
-}
-
-/* -------------------------------------------------------------------------- */
-/* the cached registry answer (machine-global)                                */
-/* -------------------------------------------------------------------------- */
-
-export interface UpdateCache {
-  /** Latest version seen on npm, or null when the last fetch failed. */
-  latest: string | null;
-  /** Epoch ms of the last *attempt* — written by the parent before it spawns the
-   * fetch, so a repeatedly-failing fetch can't make every command spawn a child. */
-  checkedAt: number;
-}
-
-/** Machine-global, not per-repo: "what's the latest graft" is one fact, and a
- * dev with twelve repos should cost the registry one request a day, not twelve. */
-export function updateCachePath(home: string = homedir()): string {
-  return join(home, '.graft', 'update-check.json');
-}
-
-export function readUpdateCache(home?: string): UpdateCache | null {
-  return readJson<UpdateCache>(updateCachePath(home));
-}
-
-function writeUpdateCache(cache: UpdateCache, home?: string): void {
-  try { writeJsonAtomic(updateCachePath(home), cache); } catch { /* unwritable home — skip */ }
-}
-
-/**
- * The `graft _update-check` command body: hit the registry, store the answer.
- * Runs in a detached child so nothing user-facing ever waits on the network.
- */
-export function refreshUpdateCache(home?: string, now = Date.now()): UpdateCache {
-  const res = getNpmViewVersion();
-  const cache: UpdateCache = { latest: res.ok ? (res.version ?? null) : null, checkedAt: now };
-  writeUpdateCache(cache, home);
-  return cache;
-}
-
-/** True when the cached answer is missing or older than the TTL. */
-export function needsRefresh(cache: UpdateCache | null, now = Date.now()): boolean {
-  return !cache || typeof cache.checkedAt !== 'number' || now - cache.checkedAt >= UPDATE_TTL_MS;
-}
-
-/**
- * Kick off a background registry check if the cache has gone stale. Touches
- * `checkedAt` first so concurrent callers (and a child that dies) don't spawn a
- * fetch per invocation. Never waits, never throws.
- *
- * Only called from long-lived or already-slow contexts (a CLI command, MCP
- * boot) — never from a hook, which reads the cache and nothing else.
- */
-export function maybeRefreshInBackground(home?: string, now = Date.now()): boolean {
-  const cache = readUpdateCache(home);
-  if (!needsRefresh(cache, now)) return false;
-  writeUpdateCache({ latest: cache?.latest ?? null, checkedAt: now }, home);
-  try {
-    const child = spawn(process.execPath, [graftCliPath(), '_update-check'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.unref();
-    return true;
-  } catch {
-    return false; // no spawn (sandbox, ENOMEM) — the nudge just uses the old cache
-  }
-}
-
-/** One line, or nothing. Nothing is the common case — don't spend context on
- * "you're up to date". */
-export function formatUpdateNudge(current: string, latest: string | null | undefined): string | null {
-  if (!isNewer(latest, current)) return null;
-  return `⬆ graft ${current} → ${latest} available: run \`npm i -g @nanonets/graft@latest\` (restart your agent after).`;
 }
 
 /* -------------------------------------------------------------------------- */

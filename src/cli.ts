@@ -45,52 +45,18 @@ import { extensionDisplayJson, extensionDisplayText } from "./graph/extension-ru
 import { readFileSync } from "node:fs";
 import { latestSession, formatSessionStats, sessionInputRate } from "./claude/session-metrics.js";
 import { setInputRate } from "./context/savings.js";
-import { formatUpdateNudge, maybeRefreshInBackground, readUpdateCache, refreshUpdateCache, writeStamp } from "./upkeep.js";
-import {
-  errorCode,
-  filesBucket,
-  durationBucket,
-  formatDebug,
-  formatStatus,
-  firstRunNotice,
-  isTrackedCommand,
-  langsValue,
-  offReason,
-  maybeFlushInBackground,
-  patchState,
-  runFlush,
-  track,
-  trackFirstRunIfNew,
-} from "./telemetry/index.js";
+import { writeStamp } from "./upkeep.js";
 
 const program = new Command();
 const currentVersion = readCurrentVersion(import.meta.url);
 
-/**
- * What the `query` telemetry event will say, filled in by the command as it runs
- * and emitted once from the `postAction` hook below.
- *
- * A module-level slot rather than a threaded parameter because the repo root is
- * resolved deep inside each action (`queryRoot`) while the event is emitted
- * centrally — and because a command that calls `process.exit` should simply
- * report nothing, which falls out of never emitting until postAction.
- */
-let queryNote: { repo?: string; hit?: "yes" | "no" } = {};
-
-/** Record the repo a query ran against, and pass it straight through so call
- *  sites stay one line. */
+/** Price this session's tokens for the repo a query ran against, and pass the
+ *  directory straight through so call sites stay one line. Every retrieval
+ *  command funnels through here, which makes it the one place that can set the
+ *  rate before a formatter needs the number. */
 function noteQuery(dir: string): string {
-  queryNote.repo = dir;
-  // Every retrieval command funnels through here, which makes it the one place
-  // that can price this session's tokens before a formatter needs the number.
   setInputRate(sessionInputRate(dir));
   return dir;
-}
-
-/** Whether a query found anything. Only the commands that have a result count in
- *  hand call this; the property is simply absent for the others. */
-function noteHit(found: boolean): void {
-  queryNote.hit = found ? "yes" : "no";
 }
 
 program
@@ -201,89 +167,6 @@ function parseTabs(raw: string | undefined): VizTab[] | undefined {
   return want as VizTab[];
 }
 
-/**
- * Commands that own the upgrade story themselves (`version`, `upgrade`) or must
- * not editorialize on stderr at startup (`mcp` runs its own upkeep at boot, and
- * `_update-check` IS the fetch).
- */
-const UPKEEP_SKIP = new Set(["version", "upgrade", "_update-check", "mcp"]);
-
-/**
- * Every other command: top up the cached registry answer in the background and,
- * if a newer graft is out, say so once on stderr. This is what makes the CLI the
- * cache filler for the hooks, which are not allowed to touch the network.
- */
-program.hook("preAction", (_parent, action) => {
-  if (UPKEEP_SKIP.has(action.name()) || action.parent?.name() === "ext"
-    || (action.name() === "build" && action.opts().dryRun)) return;
-  maybeRefreshInBackground();
-  const nudge = formatUpdateNudge(currentVersion, readUpdateCache()?.latest);
-  if (nudge) console.error(nudge);
-  // Telemetry, in the order a user should experience it: disclose first, then
-  // record, then (at most once a day, detached) send. Every step is a no-op in a
-  // fork, in CI, under DO_NOT_TRACK, or after `graft telemetry disable`.
-  const notice = firstRunNotice();
-  if (notice) console.error(notice);
-  trackFirstRunIfNew();
-  maybeFlushInBackground();
-});
-
-/**
- * The `query` event, emitted after the command rather than before it, so it can
- * carry what the query actually did. A command that exits early via
- * `process.exit` never reaches here and is simply not counted — under-reporting
- * is the right failure mode for a metric.
- */
-program.hook("postAction", (_parent, action) => {
-  const name = action.name();
-  if (!isTrackedCommand(name)) return;
-  track("query", { command: name, surface: "cli", hit: queryNote.hit }, { repo: queryNote.repo });
-});
-
-program
-  .command("_update-check", { hidden: true })
-  .description("internal: refresh the cached latest-version answer")
-  .action(() => {
-    refreshUpdateCache();
-  });
-
-// Hidden for the same reason as _update-check: only ever spawned detached, by
-// maybeFlushInBackground. Running it by hand is harmless — it drains the queue.
-program
-  .command("_telemetry-flush", { hidden: true })
-  .description("internal: POST the queued anonymous usage events")
-  .action(async () => {
-    await runFlush();
-  });
-
-program
-  .command("telemetry")
-  .description("Show, inspect, or turn off the anonymous usage stats (see TELEMETRY.md)")
-  .argument("[action]", "status (default) | enable | disable | debug", "status")
-  .action((action: string) => {
-    switch (action) {
-      case "status":
-        console.log(formatStatus());
-        return;
-      case "enable":
-        patchState({ enabled: true });
-        console.log("telemetry: on — anonymous, aggregate-only. `graft telemetry status` for details.");
-        return;
-      case "disable":
-        // Also stamp the notice as shown: someone who has just opted out should
-        // not be told about telemetry again the next time they run a command.
-        patchState({ enabled: false, noticeShownAt: new Date().toISOString() });
-        console.log("telemetry: off. Nothing further will be recorded or sent.");
-        return;
-      case "debug":
-        console.log(formatDebug());
-        return;
-      default:
-        console.error(`✗ unknown action "${action}" — expected status, enable, disable, or debug`);
-        process.exit(1);
-    }
-  });
-
 program
   .command("version")
   .description("Print the installed version and the latest published on npm")
@@ -374,7 +257,6 @@ program
         console.log(extensionDisplayJson({ repo: resolve(dir), dryRun: true, extensions }));
       })();
     }
-    const buildStartedAt = Date.now();
     if (opts.gitignore === false) process.env.GRAFT_NO_GITIGNORE = "1";
     if (opts.ignore === false) process.env.GRAFT_NO_IGNORE = "1";
     const concurrency = opts.concurrency ? Math.max(1, Number(opts.concurrency)) : undefined;
@@ -485,10 +367,6 @@ program
           process.stderr.write(
             `\r${phase === "summarize" ? "reading" : "writing"} concepts ${index + 1}/${total}: ${file.slice(0, 40).padEnd(40)}`,
           ),
-      }).catch((err: unknown) => {
-        // Only the stage and a code enum; the message stays on this machine.
-        track("build_failed", { stage: "summarize", code: errorCode(err) }, { repo: buildRoot });
-        throw err;
       });
       process.stderr.write("\n");
       console.log(
@@ -510,9 +388,6 @@ program
         process.stderr.write(
           `\r${phase === "enrich" ? "summarizing" : "parsing"} ${index + 1}/${total}: ${file.slice(0, 50).padEnd(50)}`,
         ),
-    }).catch((err: unknown) => {
-      track("build_failed", { stage: "graph", code: errorCode(err) }, { repo: buildRoot });
-      throw err;
     });
     process.stderr.write("\n");
     console.log(`✓ wiring: ${g.nodes} nodes (${fmt(g.byKind)}), ${g.edges} edges, ${g.cards} cards [${g.languages.join(", ")}]`);
@@ -524,19 +399,6 @@ program
       console.log(`  meaning: ${m.computed} computed, ${m.cached} cached, ${m.stale} stale, ${m.pending} pending`);
     }
     console.log(`  → ${g.contextDir}`);
-    // The activation event. Everything here is a bucket or a fixed label: repo
-    // scale rather than a file count, a language set rather than file names.
-    track(
-      "build_completed",
-      {
-        files_bucket: filesBucket(g.files),
-        langs: langsValue(g.languages),
-        mode: deep ? "deep" : "fast",
-        duration_bucket: durationBucket(Date.now() - buildStartedAt),
-        incremental: String(g.reused > 0),
-      },
-      { repo: buildRoot },
-    );
     for (const run of g.extensionRuns ?? []) {
       console.log(`  extension ${run.id.slice(0, 12)}: ${run.status}, ${run.nodes} nodes, ${run.edges} edges (${run.durationMs}ms)`);
       for (const line of run.log) console.error(`  [extension] ${extensionDisplayText(line)}`);
@@ -613,7 +475,6 @@ program
       process.exit(1);
       return;
     }
-    noteHit(r.hits.length > 0);
     if (opts.json) {
       console.log(JSON.stringify(r, null, 2));
     } else {
@@ -690,8 +551,7 @@ program
   .option("--json", "output the session stats as JSON")
   .action((dirArg: string | undefined, opts: { json?: boolean }) => {
     // Reads local session JSON only — no graph, no network. This is how a Cursor
-    // user (no statusline) sees the numbers the Claude Code bar would show, and it
-    // works under DO_NOT_TRACK because it never touches telemetry.
+    // user (no statusline) sees the numbers the Claude Code bar would show.
     const dir = queryRoot(dirArg);
     const s = latestSession(dir);
     if (opts.json) {
@@ -970,35 +830,20 @@ program
     const noAgents = (opts as { agents?: unknown }).agents === false;
 
     let ids: string[];
-    // The consent answer from the picker. Undefined everywhere else — a scripted
-    // or flag-driven init never asked, so it must not silently answer.
-    let consent: boolean | undefined;
     if (explicit) ids = explicit;
     else if (opts.allAgents) ids = plan.map((p) => p.id);
     else if (noAgents) ids = ["claude"];
     else if (opts.yes || opts.dryRun) ids = detectedIds;
     else if (process.stdin.isTTY && process.stderr.isTTY) {
-      // Only offer the row when telemetry could actually run. `disabled` still
-      // counts: someone who turned it off should be able to turn it back on here.
-      const reason = offReason();
-      const picked = await runPicker(plan, repo, home, {
-        offerTelemetry: reason === null || reason === "disabled",
-      });
+      const picked = await runPicker(plan, repo, home);
       if (picked === null) {
         console.error("· cancelled — nothing written");
         return;
       }
       ids = picked.hosts;
-      consent = picked.telemetry;
     } else {
       console.error(formatNonInteractiveHelp(detectedIds));
       return;
-    }
-
-    // The picker's answer, recorded before anything is wired: a user who
-    // unchecked the row must not have this run's init_completed sent.
-    if (consent !== undefined) {
-      patchState({ enabled: consent, noticeShownAt: new Date().toISOString() });
     }
 
     // Workspace parent: every child repo gets its OWN wiring too. A session
@@ -1047,12 +892,6 @@ program
           nodes: graphs.reduce((n, g) => n + g.meta.nodeCount, 0),
           edges: graphs.reduce((n, g) => n + g.meta.edgeCount, 0),
         }),
-    );
-    // Sorted so `claude,cursor` and `cursor,claude` aggregate as one value.
-    track(
-      "init_completed",
-      { agents: [...ids].sort().join(","), consent: consent === undefined ? "unasked" : String(consent) },
-      { repo },
     );
   });
 

@@ -7,7 +7,6 @@ import { underGraft, main, lastFileScopeHint, promptAskTimeout } from '../src/cl
 import { readStats, readSession } from '../src/claude/state.js';
 import { runSync } from '../src/claude/sync-run.js';
 import { savingsLine } from '../src/context/savings.js';
-import { CI_ENV_VARS } from '../src/telemetry/gate.js';
 import { writeStats, emptyStats, acquireLock, resolveContextDir } from '../src/claude/state.js';
 
 test('underGraft detects edits inside graft/', () => {
@@ -539,37 +538,6 @@ test('cursor-mcp: a graft MCP tool is a graft read with savings from result_json
     assert.equal(existsSync(join(d, 'graft', '.cache', 'session', 'c2.json')), false, 'foreign MCP tool ignored');
   } finally {
     delete process.env.CLAUDE_PROJECT_DIR;
-  }
-});
-
-test('cursor-session-end force-closes THIS conversation even though its file was just touched (idle gate skipped)', async () => {
-  const d = mkdtempSync(join(tmpdir(), 'graft-cursor-end-'));
-  const home = mkdtempSync(join(tmpdir(), 'graft-cursor-end-home-'));
-  mkdirSync(join(d, 'graft', '.cache', 'session'), { recursive: true });
-  const sfile = join(d, 'graft', '.cache', 'session', 'c1.json');
-  // mtime = now: the idle sweep would skip this, but the end hook must summarize it.
-  writeFileSync(sfile, JSON.stringify({ graftReads: 8, sourceReads: 2, savedTokens: 7400 }));
-
-  // Turn telemetry on against a scratch $HOME so the rollup actually queues (and
-  // marks the file), the observable proof the force-close ran — not just no-throw.
-  //
-  // EVERY CI variable has to go, not just `CI`: `inCi` is deliberately generous and
-  // also reads GITHUB_ACTIONS, GITLAB_CI and six more. Clearing `CI` alone passed on
-  // a laptop and failed on GitHub Actions, where GITHUB_ACTIONS is set — so the list
-  // comes from `CI_ENV_VARS` rather than being copied here, and cannot drift from it.
-  const scrubbed = ['HOME', 'USERPROFILE', 'GRAFT_POSTHOG_KEY', 'DO_NOT_TRACK', ...CI_ENV_VARS];
-  const saved = Object.fromEntries(scrubbed.map((k) => [k, process.env[k]]));
-  for (const k of [...CI_ENV_VARS, 'DO_NOT_TRACK']) delete process.env[k];
-  process.env.HOME = home; process.env.USERPROFILE = home;
-  process.env.GRAFT_POSTHOG_KEY = 'phc_test_key';
-  process.env.CLAUDE_PROJECT_DIR = d;
-  try {
-    await runWithStdin(JSON.stringify({ conversation_id: 'c1' }), () => main('cursor-session-end'));
-    assert.equal(readSession(d, 'c1').summarized, true, 'the just-ended conversation was rolled up');
-  } finally {
-    delete process.env.CLAUDE_PROJECT_DIR;
-    for (const [k, v] of Object.entries(saved))
-      if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
 });
 
