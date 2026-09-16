@@ -21,6 +21,9 @@ import { genericLangOf } from "./generic.js";
 const IMPORT_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 /** C/C++ source + header extensions, for resolving `#include` targets. */
 const C_EXT = /\.(c|h|cc|cpp|cxx|hpp|hh|hxx|inl|ipp|c\+\+|h\+\+)$/i;
+/** JavaScript/TypeScript source extensions. Narrower than IMPORT_EXTS, which also
+ * carries `.py`: only these files can import a workspace package by its name. */
+const JS_EXT = /\.(m|c)?[jt]sx?$/i;
 /** Python source + stub extensions, for the constructor-call fallback below. */
 const PY_EXT = /\.pyi?$/i;
 /** What a bare Python call falls back to when no function of that name exists:
@@ -91,11 +94,32 @@ export interface GoModule {
   dir: string;
 }
 
+/** A JavaScript/TypeScript workspace package that lives IN the repo: its declared
+ * `name`, the directory its `package.json` sits in (posix, `.` for the repo root),
+ * and the two fields that say where a subpath lands. A monorepo holds several —
+ * `packages/runtime/`, `packages/ui/`. */
+export interface WorkspacePackage {
+  name: string;
+  dir: string;
+  /** `package.json`'s `main`, used only for the root subpath and only when the
+   * package declares no `exports`. */
+  main?: string;
+  /** The string-valued half of `package.json`'s `exports`: subpath (`.`, `./api`,
+   * `./*`) → the package-relative file it names. Absent when the package declares
+   * none this pass can read. */
+  exports?: Record<string, string>;
+}
+
 export interface ResolveOptions {
   /** The Go modules found in the repo. Enables mapping Go import package paths
    * (`example.com/app/pkg/util`) to the in-repo directory they name, relative to the
    * owning module's `go.mod` location. Empty/absent → Go imports stay external strings. */
   goModules?: GoModule[];
+  /** The workspace packages found in the repo. Enables mapping a BARE specifier that
+   * names one of them (`@acme/runtime/api`) to the in-repo file it imports. Empty or
+   * absent → every bare specifier stays an external string, which is the behaviour
+   * before this option existed. */
+  workspacePackages?: WorkspacePackage[];
 }
 
 export function resolveEdges(
@@ -129,6 +153,7 @@ export function resolveEdges(
   // tail under some (unknown) source root, so the suffix is the portable key.
   const phpFilesBySuffix = new Map<string, string[]>();
   const hasGoModules = !!opts.goModules?.length;
+  const workspacePackages = opts.workspacePackages ?? [];
   for (const n of nodes) {
     if (n.kind === "file") {
       if (hasGoModules && n.path.endsWith(".go")) {
@@ -216,7 +241,7 @@ export function resolveEdges(
                 ? resolveRustUse(e.specifier, e.file, byId, rustCrateRoots)
                 : e.file.endsWith(".php")
                   ? resolvePhpUse(e.specifier, phpFilesBySuffix)
-                  : resolveImport(e.specifier, e.file, byId);
+                  : resolveImport(e.specifier, e.file, byId, workspacePackages);
       add(e.source, target, "imports", "extracted");
     } else if (e.relation === "extends" || e.relation === "implements") {
       // `implements` also resolves to a `trait` — PHP models trait composition
@@ -232,7 +257,7 @@ export function resolveEdges(
         // same-named symbol elsewhere in the repo cannot become a false edge.
         const targetFile = e.file.endsWith(".php")
           ? resolvePhpUse(e.specifier, phpFilesBySuffix)
-          : resolveImport(e.specifier, e.file, byId);
+          : resolveImport(e.specifier, e.file, byId, workspacePackages);
         if (!byId.has(targetFile)) continue; // external or unresolved module
         const candidates = perFileName.get(targetFile)?.get(e.name) ?? [];
         if (candidates.length === 1) add(e.source, candidates[0].id, "references", "extracted");
@@ -488,15 +513,11 @@ function resolveTraitMember(
 }
 
 /**
- * Resolve a module specifier to a file node id when it points inside the repo;
- * otherwise return the raw specifier (external package or unresolved path).
+ * The first in-repo file node a module path names: the path as written, then each
+ * source extension, then the directory's `index`. Null when none of them is a node,
+ * which is how a path pointing at build output or outside the repo stays unresolved.
  */
-function resolveImport(spec: string, file: string, byId: Map<string, NodeV1>): string {
-  if (!spec.startsWith(".")) return spec;
-  // Belt-and-braces: `node.path` is posix by construction (`../util/paths.ts`),
-  // but this also accepts a hand-written or hand-edited graph.
-  const dir = posix.dirname(toPosixPath(file));
-  const base = posix.normalize(posix.join(dir, spec));
+function importCandidate(base: string, byId: Map<string, NodeV1>): string | null {
   const noExt = base.replace(/\.(js|jsx|mjs|cjs|ts|tsx|py)$/, "");
   const candidates = [
     base,
@@ -504,7 +525,102 @@ function resolveImport(spec: string, file: string, byId: Map<string, NodeV1>): s
     ...IMPORT_EXTS.map((e) => `${noExt}/index${e}`),
   ];
   for (const c of candidates) if (byId.has(c)) return c;
-  return spec;
+  return null;
+}
+
+/**
+ * Resolve a module specifier to a file node id when it points inside the repo;
+ * otherwise return the raw specifier (external package or unresolved path).
+ *
+ * A bare specifier is not automatically external. In a monorepo it routinely names
+ * an IN-REPO workspace package — `@acme/runtime/api` reaching
+ * `packages/runtime/src/services/api.ts` through that package's `exports` map, a
+ * mapping no path arithmetic can guess — and reading it as third-party costs every
+ * edge through it. Measured on one frontend: 164 file `imports` edges pointed at a
+ * phantom specifier string instead of the repo file they name, and every
+ * `references` edge through such a specifier was discarded as external.
+ *
+ * It costs calls too wherever a named-import call gate is in play, since such a gate
+ * must refuse the unique-name fallback for a module it believes is not in the repo —
+ * 46 more dropped edges to one function in that same frontend.
+ *
+ * The workspace map is only consulted for JavaScript/TypeScript files. Python shares
+ * this function and IMPORT_EXTS, and a Python `import frontend` must not acquire an
+ * edge because some `package.json` in the repo happens to be named `frontend`.
+ */
+function resolveImport(
+  spec: string,
+  file: string,
+  byId: Map<string, NodeV1>,
+  packages: WorkspacePackage[],
+): string {
+  if (!spec.startsWith(".")) {
+    if (packages.length === 0 || !JS_EXT.test(file)) return spec;
+    return resolveWorkspaceImport(spec, packages, byId);
+  }
+  // Belt-and-braces: `node.path` is posix by construction (`../util/paths.ts`),
+  // but this also accepts a hand-written or hand-edited graph.
+  const dir = posix.dirname(toPosixPath(file));
+  return importCandidate(posix.normalize(posix.join(dir, spec)), byId) ?? spec;
+}
+
+/**
+ * Resolve a bare specifier that names an in-repo workspace package to the file it
+ * imports; otherwise return the raw specifier, which is what a genuinely third-party
+ * package must stay.
+ *
+ * The longest matching package name wins, so a sibling `@acme/ui-icons` is not
+ * swallowed by `@acme/ui`.
+ */
+function resolveWorkspaceImport(
+  spec: string,
+  packages: WorkspacePackage[],
+  byId: Map<string, NodeV1>,
+): string {
+  let best: { pkg: WorkspacePackage; subpath: string } | null = null;
+  for (const pkg of packages) {
+    let subpath: string | null = null;
+    if (spec === pkg.name) subpath = ".";
+    else if (spec.startsWith(`${pkg.name}/`)) subpath = `./${spec.slice(pkg.name.length + 1)}`;
+    if (subpath === null) continue;
+    if (!best || pkg.name.length > best.pkg.name.length) best = { pkg, subpath };
+  }
+  if (!best) return spec; // third-party — keep the package specifier
+  const target = exportTarget(best.pkg, best.subpath);
+  if (target === null) return spec;
+  return importCandidate(posix.normalize(posix.join(best.pkg.dir, target)), byId) ?? spec;
+}
+
+/**
+ * The package-relative file a subpath names, or null when the package does not offer
+ * that subpath at all.
+ *
+ * `exports` is a closed door in Node's own resolver: a subpath it does not list is
+ * not importable, so a miss returns null rather than falling through to a path join.
+ * Guessing there would invent an edge to a file the importing code cannot reach —
+ * precisely the kind of plausible-but-wrong target this resolver exists to refuse.
+ *
+ * Without `exports` the classic layout applies: a subpath IS a path under the package
+ * directory, and the root is whatever `main` names, or an `index` for the ladder to
+ * find.
+ */
+function exportTarget(pkg: WorkspacePackage, subpath: string): string | null {
+  const exports = pkg.exports;
+  if (!exports) return subpath === "." ? (pkg.main ?? "index") : subpath;
+  const exact = exports[subpath];
+  if (exact !== undefined) return exact;
+  // A subpath pattern: one `*` stands for the rest, e.g. `"./*": "./src/*.ts"`.
+  for (const [pattern, value] of Object.entries(exports)) {
+    const star = pattern.indexOf("*");
+    if (star === -1) continue;
+    const head = pattern.slice(0, star);
+    const tail = pattern.slice(star + 1);
+    if (!subpath.startsWith(head) || !subpath.endsWith(tail)) continue;
+    if (subpath.length < head.length + tail.length) continue;
+    const rest = subpath.slice(head.length, subpath.length - tail.length);
+    return value.replace("*", rest);
+  }
+  return null;
 }
 
 /**
