@@ -1549,7 +1549,7 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
     return;
   } else if (
     node.type === "identifier" &&
-    !isDirectCallee(node, callTypes) &&
+    !isDirectCallee(node, callTypes, ctx.lang) &&
     !isDeclarationName(node)
   ) {
     const imported = ctx.importedSymbols.get(node.text);
@@ -1882,11 +1882,21 @@ function isFunctionBoundary(node: Parser.SyntaxNode): boolean {
 /** A direct invocation already emits a stronger `calls` edge. Java names the callee
  * in a `name` field (there is no `function` field on `method_invocation`), so both
  * spellings count. */
-function isDirectCallee(node: Parser.SyntaxNode, callTypes: ReadonlySet<string>): boolean {
-  const parent = node.parent;
+function isDirectCallee(
+  node: Parser.SyntaxNode,
+  callTypes: ReadonlySet<string>,
+  lang: Language,
+): boolean {
+  // `await f<T>(x)` parses an `await_expression` in between the callee and its
+  // call (see calleeExpression), so there the call is the GRANDparent. Without
+  // this hop the callee would emit a `references` edge beside its `calls` edge,
+  // where every other spelling of the same call emits only the call.
+  const viaAwait =
+    (lang === "typescript" || lang === "tsx") && node.parent?.type === "await_expression";
+  const parent = viaAwait ? node.parent?.parent : node.parent;
   if (!parent || !callTypes.has(parent.type)) return false;
   return (
-    sameSyntaxNode(parent.childForFieldName("function"), node) ||
+    sameSyntaxNode(calleeExpression(parent, lang), node) ||
     sameSyntaxNode(parent.childForFieldName("name"), node)
   );
 }
@@ -4696,6 +4706,42 @@ function javaTypeParameterNames(decl: Parser.SyntaxNode): ReadonlySet<string> {
   return out;
 }
 
+/**
+ * The node a call expression actually NAMES, seeing through the one wrapper the
+ * grammar puts in the way.
+ *
+ * tree-sitter-typescript binds `await` tighter than a type-argument list, so
+ * `await target<string>(x)` parses as if it were `(await target)<string>(x)`: the
+ * `call_expression`'s `function` field is an `await_expression` holding the real
+ * callee, not the callee itself. The non-generic `await target(x)` parses the
+ * other way round — `await_expression` wrapping `call_expression` — which is why
+ * only the combination ever failed, and why it failed silently: `calleeName`
+ * returned null, no `calls` edge was emitted, and the callee still surfaced as a
+ * `references` edge from the identifier walk, so the graph looked populated. In
+ * one frontend that was 111 call sites across 31 files, 108 of them to a single
+ * typed API client, lost purely because the author had written
+ * `const r = await api<T>(…)` rather than `return api<T>(…)`.
+ *
+ * The parse is not wrong about WHICH name is called, only about where that name
+ * sits, so unwrapping at the two sites that read the field is the whole fix —
+ * `identifier` and `member_expression` keep their existing handling, `tsReceiver`
+ * typing included. It also covers `await obj.m<T>(x)` and `await this.m<T>(x)`,
+ * so the defect cost intra-class method edges too. Guarded to TypeScript because
+ * no other language in CALL_TYPES has `await` as an expression prefix, and
+ * widening it would be dead weight a reader has to disprove.
+ */
+function calleeExpression(call: Parser.SyntaxNode, lang: Language): Parser.SyntaxNode | null {
+  const fn = call.childForFieldName("function");
+  if (!fn) return null;
+  // An `await_expression` has exactly one named child: the awaited operand. Any
+  // other shape is one this pass does not understand, and guessing at a callee is
+  // how you get a wrong edge rather than a missing one.
+  if ((lang === "typescript" || lang === "tsx") && fn.type === "await_expression") {
+    return fn.namedChildren.length === 1 ? fn.namedChildren[0] : null;
+  }
+  return fn;
+}
+
 function calleeName(
   node: Parser.SyntaxNode,
   ctx: WalkCtx,
@@ -4831,7 +4877,7 @@ if (lang === "kotlin") {
     return { name: name.text, viaMember: false, kinds: ["function", "class"] };
   }
 
-  const fn = node.childForFieldName("function");
+  const fn = calleeExpression(node, lang);
   if (!fn) return null;
   if (fn.type === "identifier") return { name: fn.text, viaMember: false };
   if (lang === "python" && fn.type === "attribute") {
