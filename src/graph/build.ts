@@ -35,7 +35,7 @@ import {
 import { writeFingerprint } from "./fingerprint.js";
 import { seedGraph, type SeedResult } from "./seed.js";
 import { filterByOnlyDirs, listSourceStats } from "./source-files.js";
-import { resolveEdges, type GoModule } from "./resolve.js";
+import { resolveEdges, type GoModule, type WorkspacePackage } from "./resolve.js";
 import { enrichGraph, type EnrichStats } from "./enrich.js";
 import { extensionOutputExclusions } from "./extension-runtime.js";
 import { enrichWithExtensions, extensionExecutionStamp, extensionFingerprint, type ExtensionRun } from "./extensions.js";
@@ -152,6 +152,54 @@ function readGoModules(root: string, repoFiles: string[]): GoModule[] {
     }
   }
   return mods;
+}
+
+/** Every workspace package in the repo: each `package.json`'s declared `name`, the
+ * directory it lives in (posix, `.` for the root), and where its subpaths land. Lets
+ * edge resolution map a bare specifier that names an in-repo package
+ * (`@acme/runtime/api`) to the file it actually imports, instead of reading it as a
+ * third-party module and dropping every edge through it.
+ *
+ * Only string `exports` targets are kept. A conditional target
+ * (`{"import": "./dist/x.js", "require": "./dist/x.cjs"}`) names build output, which
+ * is not in the working tree and so would resolve to nothing anyway; leaving those
+ * out keeps this a plain lookup with no condition ordering to get wrong.
+ *
+ * `repoFiles` is buildGraph's single enumeration, which is Git-ignore-aware — so a
+ * `package.json` inside `node_modules/` is never seen here. That is what stops an
+ * installed dependency claiming its own name and shadowing the repo's own package. */
+function readWorkspacePackages(root: string, repoFiles: string[]): WorkspacePackage[] {
+  const pkgs: WorkspacePackage[] = [];
+  for (const f of repoFiles) {
+    if (basename(f) !== "package.json") continue;
+    try {
+      const json = JSON.parse(readFileSync(f, "utf8")) as Record<string, unknown>;
+      if (typeof json.name !== "string" || json.name === "") continue;
+      const rel = relPosix(root, dirname(f));
+      pkgs.push({
+        name: json.name,
+        dir: rel === "" ? "." : rel,
+        main: typeof json.main === "string" ? json.main : undefined,
+        exports: exportsMap(json.exports),
+      });
+    } catch {
+      /* unreadable or malformed package.json — skip this package */
+    }
+  }
+  return pkgs;
+}
+
+/** The string-valued subpaths of an `exports` field, or undefined when it declares
+ * none this pass can read. A bare string (`"exports": "./src/index.ts"`) is the root
+ * subpath; a key that does not start with `.` is a condition, not a subpath. */
+function exportsMap(exports: unknown): Record<string, string> | undefined {
+  if (typeof exports === "string") return { ".": exports };
+  if (!exports || typeof exports !== "object" || Array.isArray(exports)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(exports as Record<string, unknown>)) {
+    if (key.startsWith(".") && typeof value === "string") out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export async function buildGraph(
@@ -307,6 +355,7 @@ export async function buildGraph(
     zeitwerk,
     goodJobVersion: rails?.goodJobVersion,
     railsIncludeAllHelpers: zeitwerk ? readIncludeAllHelpers(root, repoFiles) : undefined,
+    workspacePackages: readWorkspacePackages(root, repoFiles),
   });
 
   // Guard 5 (minimum-substance): node counts aren't known until nodes are
