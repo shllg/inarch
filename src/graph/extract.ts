@@ -1548,7 +1548,7 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
     }
     return;
   } else if (
-    node.type === "identifier" &&
+    (node.type === "identifier" || isTsTypeUse(node, ctx.lang)) &&
     !isDirectCallee(node, callTypes, ctx.lang) &&
     !isDeclarationName(node)
   ) {
@@ -1905,6 +1905,43 @@ function isDirectCallee(
 function isDeclarationName(node: Parser.SyntaxNode): boolean {
   const parent = node.parent;
   return sameSyntaxNode(parent?.childForFieldName("name"), node);
+}
+
+/**
+ * Is this node a TypeScript type POSITION — a use of a type, rather than a
+ * declaration of one or a name that already has an edge of its own?
+ *
+ * Every TypeScript type position produces a `type_identifier`, never an `identifier`:
+ * in `function f(input: TaskInput): Promise<TaskRecord>`, `f` and `input` are
+ * `identifier` while `TaskInput`, `Promise` and `TaskRecord` are `type_identifier`.
+ * The reference walk keyed on `identifier` alone, so a file's type dependencies were
+ * invisible — a service module's contract with the rest of the app is mostly its
+ * types, and `blast` could not see any of it.
+ *
+ * No allow-list of built-ins is needed and none should be added: the caller emits an
+ * edge only for a name in `ctx.importedSymbols`, and `Promise`, `Array` and `Record`
+ * are not imported. The import requirement does that work by construction.
+ *
+ * Two positions are excluded, both because the name there is not the file's to
+ * resolve:
+ *
+ *   - `A.B` parses as a `nested_type_identifier` whose `A` is an `identifier` and
+ *     whose `B` is a `type_identifier`. `B` is a member of the namespace `A`, not a
+ *     symbol this file imported, so binding it would reach for any same-named type
+ *     anywhere — the unique-name failure this resolver exists to refuse.
+ *   - A heritage clause already emits `extends`/`implements` from heritageEdges().
+ *     `implements Iface` names its type with a `type_identifier`, so without this it
+ *     would acquire a second, redundant `references` edge beside the first.
+ */
+function isTsTypeUse(node: Parser.SyntaxNode, lang: Language): boolean {
+  if (lang !== "typescript" && lang !== "tsx") return false;
+  if (node.type !== "type_identifier") return false;
+  const parent = node.parent?.type;
+  return (
+    parent !== "nested_type_identifier" &&
+    parent !== "extends_clause" &&
+    parent !== "implements_clause"
+  );
 }
 
 /** Recognize the definition shapes: mapped node types, Go's type/method forms, and
