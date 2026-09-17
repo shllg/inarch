@@ -1417,7 +1417,23 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
     const consumedCallee = ctx.lang === "r" && node.type === "call" ? rCalleeName(node) : null;
     const isConsumedRClassCall =
       consumedCallee === "R6Class" || (consumedCallee === "list" && rIsMixinContainer(node));
-    const callee = isConsumedRClassCall ? null : calleeName(node, ctx);
+    const named = isConsumedRClassCall ? null : calleeName(node, ctx);
+    // `await onSubmit?.(values)` inside a React component calls a PROP. The name is
+    // declared in the component's own props type and destructured out of its
+    // parameter, so nothing in the repository defines it and the only correct answer
+    // is no edge. The edge was emitted anyway and resolve.ts had nowhere good to send
+    // it: a bare name carries no specifier, so it goes around #335's module gate into
+    // the repo-wide unique-name tier, which bound production code to a Storybook
+    // story's `onSubmit` at `inferred` (corpus dw-h11-032) and put 14 more edges from
+    // production into `.stories.`/`.test.` files. Dropping it here rather than
+    // teaching resolution a better guess is the point: the callee is a value this
+    // function was handed, and no amount of name matching can make that a definition.
+    //
+    // PARAMETERS ONLY, and that restriction is load-bearing. A nested
+    // `const notify = () => {}` or `function later() {}` MINTS A NODE, so its call
+    // already resolves same-file at `extracted` — suppressing local declarations too
+    // would throw those away. A parameter is the binding form that never mints one.
+    const callee = named && isLocalParameterCall(node, named, ctx) ? null : named;
     if (callee) {
       // A bare TypeScript call through a named import carries where the callee
       // comes from. `ctx.importedSymbols` already excludes bindings shadowed by
@@ -1904,6 +1920,94 @@ function withoutShadowedImports(
   visit(definition);
   if (![...shadowed].some((name) => imports.has(name))) return imports;
   return new Map([...imports].filter(([local]) => !shadowed.has(local)));
+}
+
+/**
+ * Is this bare call really a call to something a parameter bound?
+ *
+ * Confined to the JS/TS family (`.js`/`.jsx` parse with the `typescript`/`tsx`
+ * grammars, so the two `ctx.lang` values cover all six extensions) because that is
+ * where it is measured. The argument generalizes — a parameter is a value, not a
+ * definition, in every language here — but a rule that drops edges has to be checked
+ * against a corpus before it is widened, and Python and Go have none in this project.
+ *
+ * A member call is excluded: `o.onSubmit()` never took the bare-name path. So is an
+ * imported name, which is bound at the top level and already module-confined.
+ */
+function isLocalParameterCall(
+  node: Parser.SyntaxNode,
+  callee: { name: string; viaMember: boolean },
+  ctx: WalkCtx,
+): boolean {
+  if (ctx.lang !== "typescript" && ctx.lang !== "tsx") return false;
+  if (callee.viaMember) return false;
+  if (ctx.importedSymbols.has(callee.name)) return false;
+  return boundByEnclosingParameter(node, callee.name);
+}
+
+/**
+ * Walk out to the module's top level looking for a parameter that binds `name`.
+ *
+ * Stopping at `program` is the whole precision argument: a top-level binding is a
+ * definition with a node, and T4's same-file `extracted` answers depend on it.
+ * Only what is bound INSIDE some enclosing function counts.
+ */
+function boundByEnclosingParameter(node: Parser.SyntaxNode, name: string): boolean {
+  for (let cur = node.parent; cur && cur.type !== "program"; cur = cur.parent) {
+    if (cur.type === "catch_clause") {
+      const caught = cur.childForFieldName("parameter");
+      if (caught && patternBinds(caught, name)) return true;
+      continue;
+    }
+    if (!isFunctionBoundary(cur)) continue;
+    // An arrow with parentheses has `parameters`; `each => each()` has `parameter`.
+    const params = cur.childForFieldName("parameters") ?? cur.childForFieldName("parameter");
+    if (params && patternBinds(params, name)) return true;
+  }
+  return false;
+}
+
+/**
+ * Does this parameter pattern bind `name`?
+ *
+ * Two fields are deliberately not followed, and both would produce a wrong answer in
+ * the expensive direction — a dropped edge that nothing reports:
+ *   - `pair_pattern`'s `key`. In `{ onSubmit: submit }` the binding is `submit`;
+ *     `onSubmit` is a property name that exists only on the caller's object.
+ *   - a parameter's `type_annotation`. `onSave?: (save: X) => void` contains a whole
+ *     `formal_parameters` of its own, and recursing into it would let a type's
+ *     parameter name suppress a real call to a function called `save`.
+ *
+ * An unrecognised node type answers `false` — it keeps today's behaviour rather than
+ * silently widening a rule whose entire job is to remove edges.
+ */
+function patternBinds(node: Parser.SyntaxNode, name: string): boolean {
+  switch (node.type) {
+    case "identifier":
+    case "shorthand_property_identifier_pattern":
+      return node.text === name;
+    case "required_parameter":
+    case "optional_parameter": {
+      const pattern = node.childForFieldName("pattern");
+      return pattern !== null && patternBinds(pattern, name);
+    }
+    case "pair_pattern": {
+      const value = node.childForFieldName("value");
+      return value !== null && patternBinds(value, name);
+    }
+    case "object_assignment_pattern":
+    case "assignment_pattern": {
+      const left = node.childForFieldName("left");
+      return left !== null && patternBinds(left, name);
+    }
+    case "formal_parameters":
+    case "object_pattern":
+    case "array_pattern":
+    case "rest_pattern":
+      return node.namedChildren.some((child) => patternBinds(child, name));
+    default:
+      return false;
+  }
 }
 
 function isFunctionBoundary(node: Parser.SyntaxNode): boolean {
