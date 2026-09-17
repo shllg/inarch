@@ -615,6 +615,18 @@ export function resolveEdges(
   // `extends` edges (source id's own name → the base name). Used to walk up an
   // inheritance chain when a receiver's own type has no matching method.
   const classParents = new Map<string, string[]>();
+  // Every `export … from '…'` in the repo, grouped by the module that wrote it, so a
+  // barrel can be walked instead of guessed past. Built from the raw edges rather than
+  // the resolved ones because the walk needs the SPECIFIER, which resolution consumes.
+  const reexports = new Map<string, ReexportEntry[]>();
+  for (const e of rawEdges) {
+    if (e.relation !== "imports" || !e.name || !e.specifier) continue;
+    const list = reexports.get(e.file);
+    const entry = { name: e.name, exportedAs: e.exportedAs, specifier: e.specifier };
+    if (list) list.push(entry);
+    else reexports.set(e.file, [entry]);
+  }
+
   for (const e of rawEdges) {
     if (e.relation !== "extends" || !e.name) continue;
     // The declaring class's own bare name — read from its node (keyed by n.name, set
@@ -1130,7 +1142,15 @@ export function resolveEdges(
           : resolveImport(e.specifier, e.file, byId, workspacePackages);
         if (!byId.has(targetFile)) continue; // external or unresolved module
         const candidates = perFileName.get(targetFile)?.get(e.name) ?? [];
-        if (candidates.length === 1) add(e.source, candidates[0].id, "references", "extracted");
+        if (candidates.length === 1) {
+          add(e.source, candidates[0].id, "references", "extracted");
+        } else if (candidates.length === 0) {
+          // The module is ours and does not define the name — a barrel. Walk its
+          // re-exports rather than dropping, which is what made a design system's
+          // whole component layer unreachable through its own index.
+          const hit = resolveThroughReexports(targetFile, e.name, reexports, byId, perFileName, null, workspacePackages);
+          if (hit && hit !== "ambiguous") add(e.source, hit.id, "references", "extracted");
+        }
       } else if (e.nesting) {
         // Ruby (M1). The presence of a nesting chain is the switch, so this path
         // is provably unreachable for every other language and for any graph built
@@ -1407,6 +1427,17 @@ export function resolveEdges(
           continue;
         }
         if (inModule.length > 1) continue;
+        // The module is ours and does not define the name: a barrel. #335 comments
+        // above that this case "keeps the name-based fallback", and that fallback is
+        // precisely what bound a production component to a same-named one in a
+        // DIFFERENT application. Walk the re-exports first — every hop is read from
+        // source — and only fall through when the barrel genuinely does not offer it.
+        const viaBarrel = resolveThroughReexports(targetFile, e.name!, reexports, byId, perFileName, callKinds, workspacePackages);
+        if (viaBarrel === "ambiguous") continue; // never guess past an ambiguous barrel
+        if (viaBarrel) {
+          add(e.source, viaBarrel.id, "calls", "extracted");
+          continue;
+        }
       }
       let hit = resolveName(e.name!, e.file, callKinds, perFileName, globalName);
       // Python is the Java case without the `new` to mark it: `Widget()` is an
@@ -2145,6 +2176,85 @@ function ownerFromMethodId(id: string): string | undefined {
  * Resolve a bare symbol name: same-file match first (certain → `extracted`),
  * else a unique cross-file match (→ `inferred`), else null (ambiguous/unknown).
  */
+
+interface ReexportEntry {
+  name: string;
+  exportedAs?: string;
+  specifier: string;
+}
+
+/** How many `export … from` hops to follow before giving up. A design-system barrel is
+ * two or three deep in practice; this is generous and bounds a pathological chain. */
+const MAX_REEXPORT_HOPS = 8;
+
+/**
+ * Follow `export … from '…'` out of a module that does not define `name` itself.
+ *
+ * Specifier-confined at every hop: each step is an explicit re-export read out of
+ * source, and the search only ever enters modules that source named. It never widens
+ * to a repo-wide name match — that fallback is what bound a production component to a
+ * different application's same-named one, and walking the barrel properly is how the
+ * edge becomes evidence rather than coincidence.
+ *
+ * Returns the single matching node, `"ambiguous"` when more than one distinct
+ * definition is reachable (two `export *` offering the same name is the real case, and
+ * picking either is a guess), or null when nothing is.
+ *
+ * `seen` guards a re-export cycle, which is legal to write and would otherwise not
+ * terminate.
+ */
+function resolveThroughReexports(
+  file: string,
+  name: string,
+  reexports: Map<string, ReexportEntry[]>,
+  byId: Map<string, NodeV1>,
+  perFileName: Map<string, Map<string, NodeV1[]>>,
+  kinds: Kind[] | null,
+  // T3: a barrel very often re-exports from a workspace PACKAGE rather than a
+  // relative path — `export { Input } from '@dailywerk/frontend-ui'` is the shape
+  // this was found on — so the hop needs the same package map every other
+  // specifier resolution gets, or it stops at the first bare specifier.
+  workspacePackages: WorkspacePackage[],
+  seen: Set<string> = new Set(),
+  hops = 0,
+): NodeV1 | "ambiguous" | null {
+  if (hops >= MAX_REEXPORT_HOPS || seen.has(file)) return null;
+  seen.add(file);
+  const entries = reexports.get(file);
+  if (!entries) return null;
+
+  const found: NodeV1[] = [];
+  let ambiguous = false;
+  for (const entry of entries) {
+    const star = entry.name === "*";
+    // A named entry only answers for the name it exposes; a star answers for anything,
+    // and carries the asked-for name straight through.
+    if (!star && (entry.exportedAs ?? entry.name) !== name) continue;
+    const inner = star ? name : entry.name;
+    const target = resolveImport(entry.specifier, file, byId, workspacePackages);
+    if (!byId.has(target)) continue; // external module — not ours to resolve
+    const direct = (perFileName.get(target)?.get(inner) ?? []).filter(
+      (n) => kinds === null || kinds.includes(n.kind),
+    );
+    if (direct.length === 1) {
+      found.push(direct[0]);
+      continue;
+    }
+    if (direct.length > 1) {
+      ambiguous = true;
+      continue;
+    }
+    const deeper = resolveThroughReexports(target, inner, reexports, byId, perFileName, kinds, workspacePackages, seen, hops + 1);
+    if (deeper === "ambiguous") ambiguous = true;
+    else if (deeper) found.push(deeper);
+  }
+
+  const distinct = [...new Set(found.map((n) => n.id))];
+  if (distinct.length > 1 || (ambiguous && distinct.length > 0)) return "ambiguous";
+  if (ambiguous) return "ambiguous";
+  return distinct.length === 1 ? found.find((n) => n.id === distinct[0])! : null;
+}
+
 function resolveName(
   name: string,
   file: string,

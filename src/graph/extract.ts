@@ -153,6 +153,11 @@ export interface RawEdge {
    * that module instead of guessing from a unique repo-wide name match (#330). */
   specifier?: string;
   name?: string; // symbol name to resolve (extends/implements/calls)
+  /** imports only, and only for `export … from '…'`: the name the re-exporting
+   * module exposes, when it differs from `name`. `export { Inner as Outer }` records
+   * `name: "Inner"` (what the target module defines) and `exportedAs: "Outer"` (what
+   * an importer writes). Absent means the two are the same. */
+  exportedAs?: string;
   viaMember?: boolean; // calls: was it `obj.foo()` (→ prefer method targets)?
   /** calls with viaMember: the receiver's resolved type name (from bindings /
    * self / this / Go receiver), when a confident local clue exists. */
@@ -1260,6 +1265,23 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
     if (spec) edges.push({ source: ctx.rel, relation: "imports", specifier: spec, file: ctx.rel });
     // Imported identifiers are declarations, not uses. The import-binding pass
     // above already recorded them, so do not descend and emit false references.
+    return;
+  } else if (
+    (ctx.lang === "typescript" || ctx.lang === "tsx") &&
+    node.type === "export_statement" &&
+    node.childForFieldName("source")
+  ) {
+    // `export { Select } from './select'` produced nothing at all: not the dependency
+    // on `./select`, and no record that this module offers the name. An importer of
+    // the barrel therefore reached a module that does not define what it asked for,
+    // and resolution either dropped the edge or fell through to a repo-wide name
+    // match. Both halves are recorded here; resolve.ts walks them.
+    //
+    // The `source` field is what separates a re-export from a plain `export { x }`,
+    // which names no module and must stay untouched.
+    for (const e of reexportEdges(node, ctx.rel)) edges.push(e);
+    // The names in an export clause are declarations of what this module exposes,
+    // not uses of anything, so descending would only emit false references.
     return;
   } else if (callTypes.has(node.type)) {
     // R6Class(...) / a Phase-5 mixin list(...) is already consumed by its
@@ -5276,6 +5298,51 @@ function isImport(node: Parser.SyntaxNode, lang: Language): boolean {
   // grouped) `use A\B, C\D;` / `use A\{B, C};` declaration.
   if (lang === "php") return node.type === "namespace_use_clause";
   return node.type === "import_statement" || node.type === "import_from_statement";
+}
+
+/**
+ * The re-export facts in `export … from '…'`, as `imports` raw edges carrying a name.
+ *
+ * Riding the existing `imports` relation is deliberate. A re-export IS a dependency on
+ * the module it names — one the graph did not record at all before — so the edge is
+ * worth emitting on its own account, and `name` makes it additionally readable as "this
+ * module offers that symbol from there". No new relation enters the public vocabulary
+ * for what is an internal resolution aid, and the cache format does not change.
+ *
+ * Three shapes, from `tree-sitter-typescript`:
+ *   - `export { A } from './m'`        → export_specifier, field `name`
+ *   - `export { A as B } from './m'`   → the same, plus field `alias`; `name` is what
+ *                                        the TARGET defines, `alias` what importers write
+ *   - `export * from './m'`            → a `source` and no export_clause at all
+ *
+ * A star is recorded as the reserved name `*`, which no JavaScript identifier can be,
+ * so it cannot collide with a real symbol. `export type { A } from './m'` parses
+ * identically to the named form and needs no special case.
+ */
+function reexportEdges(node: Parser.SyntaxNode, rel: string): RawEdge[] {
+  const source = node.childForFieldName("source");
+  const spec = source?.namedChildren.find((c) => c.type === "string_fragment")?.text;
+  if (!spec) return [];
+  const clause = node.namedChildren.find((c) => c.type === "export_clause");
+  if (!clause) {
+    return [{ source: rel, relation: "imports", specifier: spec, name: "*", file: rel }];
+  }
+  const out: RawEdge[] = [];
+  for (const spc of clause.namedChildren) {
+    if (spc.type !== "export_specifier") continue;
+    const inner = spc.childForFieldName("name")?.text;
+    if (!inner) continue;
+    const outer = spc.childForFieldName("alias")?.text;
+    out.push({
+      source: rel,
+      relation: "imports",
+      specifier: spec,
+      name: inner,
+      ...(outer && outer !== inner ? { exportedAs: outer } : {}),
+      file: rel,
+    });
+  }
+  return out;
 }
 
 function importSpecifier(node: Parser.SyntaxNode, lang: Language): string | null {
