@@ -22,9 +22,9 @@
  * checkout or a shallow clone leaves the report exactly as it was and the comment
  * simply says nothing about people.
  */
-import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import type { BlastReport } from "./blast.js";
+import { runGit } from "../util/git.js";
 
 /** One person's claim on one area. */
 export interface Owner {
@@ -111,17 +111,8 @@ function isBot(name: string, email: string): boolean {
   return /\[bot\]/i.test(name) || /\[bot\]@/i.test(email) || /^(github-actions|dependabot|renovate)(\[bot\])?$/i.test(name.trim());
 }
 
-/** Run git in `root`, or null when git fails — not a repo, no git, no history. */
-function git(root: string, args: string[]): string | null {
-  const res = spawnSync("git", ["-c", "core.quotePath=false", ...args], {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (res.error || res.status !== 0 || typeof res.stdout !== "string") return null;
-  return res.stdout;
-}
+/** Run git in `root`, or null when git fails. See `runGit` for what it pins. */
+const git = runGit;
 
 /**
  * The people behind `files`, best first.

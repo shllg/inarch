@@ -257,3 +257,82 @@ test("diff: hunks carry their text, and the next file's header is not read as a 
   const sql = res.files.find((f) => f.path === "query.sql");
   assert.deepEqual(sql?.hunks[0].lines, [{ n: 1, sign: "+", text: "-- report" }], "a real -- line survives");
 });
+
+/**
+ * A reader's git config is not allowed to change the answer.
+ *
+ * Four tests in this file failed on one machine for months and were written down as
+ * "pre-existing on pristine upstream/main" — furniture rather than a defect. They
+ * were a defect. `diff.mnemonicPrefix` spells the post-image prefix by role, so a
+ * header reads `+++ w/src/math.ts`; the hunk parser strips `b/`, kept the whole
+ * string, and matched it against no file from the name-status pass. The hunk
+ * attached to nothing, the file's ranges stayed empty, and with no ranges the seeder
+ * falls back to the whole file — so an edit to `add` reported `math.ts` and walked
+ * `imports` instead of `calls`. Nothing errored. The command answered a coarser
+ * question, which is the one failure an impact tool cannot afford.
+ *
+ * Every fixture above inherits whatever git config the machine running it happens to
+ * carry, so it reproduces that only by accident. These set it on purpose, which is
+ * why they would have caught it on a clean machine too.
+ *
+ * Two of the four are red without the pinning and two are guards that are green
+ * either way, which is worth knowing rather than averaging away. `color.ui=always`
+ * was already covered, because the patch pass passes `--no-color`; it is kept so
+ * that flag cannot quietly go missing. `diff.noprefix=true` passes by luck — it
+ * yields a bare `+++ src/math.ts`, which the `b/`-stripper leaves alone and which
+ * happens to be the right path. Luck is not a property worth depending on.
+ */
+const HOSTILE: [string, string, string][] = [
+  ["mnemonic prefixes", "diff.mnemonicPrefix", "true"],
+  ["no prefix at all", "diff.noprefix", "true"],
+  ["a custom post-image prefix", "diff.dstPrefix", "PLEASE_NO/"],
+  ["colour forced through a pipe", "color.ui", "always"],
+];
+
+/**
+ * Neutralize every setting under test, so each case varies exactly one.
+ *
+ * Without this the fixture inherits whatever the developer running it has set, and
+ * on the machine where this defect lived that is `diff.mnemonicPrefix=true` — so
+ * every case below failed for the same inherited reason and none of them proved
+ * anything about the setting it names. A local value overrides a global one, which
+ * is what makes the isolation possible at all. `builtRepo()` deliberately does NOT
+ * do this: the tests above should keep inheriting a real machine's configuration,
+ * because that inheritance is how the defect was found.
+ */
+function neutral(d: string): void {
+  git(d, "config", "diff.mnemonicPrefix", "false");
+  git(d, "config", "diff.noprefix", "false");
+  git(d, "config", "diff.srcPrefix", "a/");
+  git(d, "config", "diff.dstPrefix", "b/");
+  git(d, "config", "color.ui", "false");
+}
+
+for (const [label, key, value] of HOSTILE) {
+  test(`blast: ${label} cannot change the seeds`, () => {
+    const d = builtRepo();
+    neutral(d);
+    git(d, "config", key, value);
+    writeFileSync(join(d, "src", "math.ts"), MATH_EDITED);
+
+    const report = blastJson([d]);
+    assert.deepEqual(report.seeds.map((s) => s.name), ["add"], `${key}=${value}`);
+    // The distinguishing symptom, and the reason this went unnoticed: a lost hunk
+    // does not fail, it widens the seed to the whole file.
+    assert.equal(report.seeds[0].wholeFile, false, "seeded by symbol, not by file");
+    assert.ok(!report.impacted.map((i) => i.name).includes("area"), "area calls mul, untouched");
+  });
+}
+
+test("blast: every hostile setting at once still seeds by symbol", () => {
+  const d = builtRepo();
+  neutral(d);
+  for (const [, key, value] of HOSTILE) git(d, "config", key, value);
+  git(d, "config", "diff.srcPrefix", "ALSO_NO/");
+  writeFileSync(join(d, "src", "math.ts"), MATH_EDITED);
+
+  const report = blastJson([d]);
+  assert.deepEqual(report.seeds.map((s) => s.name), ["add"]);
+  assert.deepEqual(report.changed.map((c) => c.path), ["src/math.ts"], "the path survives too");
+  assert.deepEqual(report.changed[0].ranges, [{ start: 2, end: 2 }], "one line, read exactly");
+});

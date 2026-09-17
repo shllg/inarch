@@ -7,8 +7,8 @@
  * this feeds already has git — and `--unified=0` gives exactly the post-image
  * line ranges we need, with no context lines to subtract back out.
  */
-import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { runGit } from "../util/git.js";
 
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed";
 
@@ -64,17 +64,8 @@ const HUNK_RE = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 const MAX_HUNK_LINES = 24;
 const MAX_FILE_LINES = 200;
 
-/** Run git in `root`, or return null when git fails (not a repo, unknown ref). */
-function git(root: string, args: string[]): string | null {
-  const res = spawnSync("git", ["-c", "core.quotePath=false", ...args], {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (res.error || res.status !== 0 || typeof res.stdout !== "string") return null;
-  return res.stdout;
-}
+/** Run git in `root`, or null when git fails. See `runGit` for what it pins. */
+const git = runGit;
 
 /** True when `ref` names something git can resolve — checked before diffing so
  * an unknown `--base` fails with a caller-facing message, not a git stack. */
