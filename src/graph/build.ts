@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { walkDir } from "../ingest/fs.js";
 import { contextDirFor, ensureGitignored, ensureSearchable } from "../context/node-file.js";
-import { extractFile, languageLabelOf, languageOf, type RawEdge } from "./extract.js";
+import { extractFile, grammarFailures, languageLabelOf, languageOf, type RawEdge } from "./extract.js";
 import { extractGeneric, genericLangOf, warmGenericGrammars } from "./generic.js";
 import { containerLangOf, extractContainer, warmContainerGrammars } from "./container.js";
 import { readIncludeAllHelpers } from "./rails-views.js";
@@ -127,6 +127,15 @@ export interface GraphBuildResult {
   meaning: EnrichStats;
   extensionRuns?: ExtensionRun[];
   errors: string[];
+  /**
+   * A tier degraded but the build is sound: today, a native grammar that would not
+   * load, so its files went to the breadth tier or to a file node.
+   *
+   * Separate from `errors` on purpose. A degraded graph is a warning, and a warning
+   * that fails a check is a warning people learn to silence — upstream #214 is right
+   * about that. The build writes a graph, exits 0, and says what it could not parse.
+   */
+  warnings: string[];
 }
 
 /** Every Go module in the repo: each `go.mod`'s declared `module` path and the repo
@@ -254,8 +263,20 @@ export async function buildGraph(
   // Breadth tier: WASM grammars load asynchronously, so warm the ones this repo
   // needs ONCE here (buildGraph is async) before the synchronous parse loop below
   // can call extractGeneric. Depth-tier (native) grammars need no warmup.
+  //
+  // Warmed from the files the DEPTH tier does not claim, which is the same three-way
+  // branch the parse loop below takes. Warming from the extensions alone warmed the
+  // breadth `java` grammar on every repo with a `.java` file in it — a grammar that
+  // run would never call — and, once a depth grammar can fail (T2), would have missed
+  // the one case that matters: with kotlin broken, `languageOf` stops claiming `.kt`
+  // and those files need the breadth grammar this run.
   await warmGenericGrammars(
-    new Set(files.map((f) => genericLangOf(f.abs)?.name).filter((n): n is string => !!n)),
+    new Set(
+      files
+        .filter((f) => !languageOf(f.abs) && !containerLangOf(f.abs))
+        .map((f) => genericLangOf(f.abs)?.name)
+        .filter((n): n is string => !!n),
+    ),
   );
   // Container tier (.vue and friends) loads its wrapper grammars the same way,
   // for the same reason: extractContainer runs inside the sync loop below.
@@ -487,6 +508,16 @@ export async function buildGraph(
     meaning,
     ...(extensionRuns.length ? { extensionRuns } : {}),
     errors,
+    // Read AFTER the parse loop, never before: a failure is only recorded once
+    // something asked for that grammar, which is what keeps a repo with no Kotlin in
+    // it completely quiet. One line per language, naming the module and quoting the
+    // loader verbatim — the original symptom was an error that could not say its own
+    // name, so paraphrasing it here would repeat the defect.
+    warnings: grammarFailures().map(
+      (f) =>
+        `${f.lang}: ${f.module} could not be loaded, so ${f.extensions.join("/")} files ` +
+        `were indexed without a depth-tier parser — ${f.error}`,
+    ),
   };
 }
 

@@ -321,7 +321,11 @@ test("an unreadable file is still recorded, so it can't look new on every probe"
 test("extractorStamp: a real identity for the loaded extraction code", () => {
   const s = extractorStamp();
   assert.notEqual(s, "unknown", "path resolution must work under both tsx and dist/, or invalidation silently stops");
-  assert.match(s, /^[0-9a-f]{16}$/);
+  // `<16 hex>-<comma-separated grammars that loaded>`. The suffix is T2: which
+  // grammars loaded can now vary between runs, and a stamp that cannot see that
+  // replays a degraded parse forever. Appended rather than hashed in so a sidecar
+  // says what it was built with.
+  assert.match(s, /^[0-9a-f]{16}-[a-z,]+$/);
   assert.equal(s, extractorStamp(), "memoized — the cost is paid once per process");
 });
 

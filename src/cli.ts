@@ -393,6 +393,7 @@ program
       console.log(`  extension ${run.id.slice(0, 12)}: ${run.status}, ${run.nodes} nodes, ${run.edges} edges (${run.durationMs}ms)`);
       for (const line of run.log) console.error(`  [extension] ${extensionDisplayText(line)}`);
     }
+    for (const w of g.warnings) console.error(`! ${w}`);
     for (const e of g.errors) console.error(`✗ ${e}`);
 
     const rel = relative(process.cwd(), g.contextDir) || "graft";

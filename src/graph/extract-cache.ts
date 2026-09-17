@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, extname, join } from "node:path";
 import { CACHE_DIR } from "../context/node-file.js";
 import { readJson, writeJsonAtomic } from "../util/state.js";
-import type { RawEdge } from "./extract.js";
+import { loadedGrammarsStamp, type RawEdge } from "./extract.js";
 import type { NodeV1 } from "./types.js";
 
 /** Bump when the on-disk shape below changes. */
@@ -133,6 +133,21 @@ let memoizedStamp: string | null | undefined;
  * tree-sitter grammar upgrade (which changes parse output without changing any of
  * graft's own files) invalidates too.
  *
+ * **And which grammars actually loaded** (T2). This is the input the doc comment's own
+ * invariant — "*anything* that can change extraction output has to change this
+ * string" — demanded and could not have: until grammars were allowed to fail, which
+ * ones loaded was a constant. The moment it varies, the bug it opens is the worst
+ * kind. Run 1 with Kotlin unloadable caches every `.kt` file as breadth-tier or
+ * absent. The user reads the warning and reinstalls. Run 2 hashes the same modules
+ * and the same version, computes an identical stamp, hits the cache, and replays the
+ * degraded parse — indefinitely, and silently, because a cache hit prints nothing.
+ * The user did exactly what they were told and the graph did not move.
+ *
+ * Folding the loaded set in invalidates precisely the entries affected, in BOTH
+ * directions (repair and regression), for every language, through the mechanism this
+ * file already documents. Upstream #325 names the hazard and solves it inside the
+ * Kotlin path; this is the same fix in the place that makes it general.
+ *
  * Measured at ~0.5ms for 21 files / 556KB, paid once per process.
  *
  * **Null when no identity can be established at all**, and that is deliberately not
@@ -149,19 +164,30 @@ export function extractorStamp(): string | null {
   return memoizedStamp;
 }
 
+/** Drop the per-process memo so a test can change the environment the stamp reads —
+ * which grammars loaded — and observe that the stamp follows it. Nothing in normal
+ * operation needs this: within one process the answer genuinely cannot change. */
+export function resetStampForTest(): void {
+  memoizedStamp = undefined;
+}
+
 function computeStamp(): string | null {
   try {
     const self = fileURLToPath(import.meta.url);
     // `.js` when running from `dist/`, `.ts` under tsx — take the extension from
     // our own filename rather than guessing which layout we're in.
     const dir = dirname(self);
+    // Appended rather than folded into the hash so a degraded run is legible on
+    // sight: `a1b2…-typescript,tsx,python` in a sidecar says what that cache was
+    // built with, without anyone having to reproduce the environment to find out.
+    const grammars = loadedGrammarsStamp();
     const hashed = stampDir(dir, extname(self), packageVersion(dir) ?? "");
-    if (hashed) return hashed;
+    if (hashed) return `${hashed}-${grammars}`;
     // Couldn't read the modules (bundled into one file, say). The version alone is
     // a weaker identity — it can't see a local edit — but it still turns over on
     // every upgrade, which is the case that ships broken parses to users.
     const v = packageVersion(dir);
-    return v ? `v${v}` : null;
+    return v ? `v${v}-${grammars}` : null;
   } catch {
     return null;
   }

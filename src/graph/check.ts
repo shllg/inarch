@@ -20,7 +20,7 @@
 import { resolve } from "node:path";
 import { relPosix } from "../util/paths.js";
 import { contextDirFor } from "../context/node-file.js";
-import { extractFile, languageOf } from "./extract.js";
+import { extractFile, grammarFailures, languageOf } from "./extract.js";
 import { extractGeneric, genericLangOf, warmGenericGrammars } from "./generic.js";
 import { containerLangOf, extractContainer, warmContainerGrammars } from "./container.js";
 import { filterByOnlyDirs, listSourceFiles } from "./source-files.js";
@@ -52,6 +52,16 @@ export interface GraphCheckResult {
    * coverage figure. A deep build that lost most of its LLM calls (#127) is only
    * distinguishable from a deliberate Tier-1 build by the SHARE that is missing. */
   nodes: number;
+  /**
+   * Native grammars that would not load this run, one line each (T2).
+   *
+   * Reported, never counted toward `ok`. A `.kt` file extracted through the breadth
+   * tier is genuinely in sync with its source — it is simply carrying less than a
+   * healthy install would. Failing the check for it would make `inarch check` red on
+   * a machine where nothing is wrong with the repository, and a check that is red for
+   * something you cannot fix from the repository is a check people stop reading.
+   */
+  grammarWarnings: string[];
 }
 
 export interface GraphCheckOptions {
@@ -78,6 +88,7 @@ export async function checkGraph(
     stale: [],
     pending: 0,
     pendingIds: [],
+    grammarWarnings: [],
     nodes: 0,
   };
 
@@ -109,8 +120,16 @@ export async function checkGraph(
   // including the non-source Gemfile witness, and both extraction tiers need it.
   const zeitwerk = discoverZeitwerk(root, repoFiles);
   const rails = zeitwerk ? { acronyms: zeitwerk.acronyms } : null;
+  // Warmed from the files the depth and container tiers do not claim — the same
+  // three-way branch the loop below takes. See buildGraph for why the extension list
+  // alone is the wrong input.
   await warmGenericGrammars(
-    new Set(sourceFiles.map((f) => genericLangOf(f)?.name).filter((n): n is string => !!n)),
+    new Set(
+      sourceFiles
+        .filter((f) => !languageOf(f) && !containerLangOf(f))
+        .map((f) => genericLangOf(f)?.name)
+        .filter((n): n is string => !!n),
+    ),
   );
   // Container-tier grammars need the same warmup as the generic ones, for the same
   // reason: extraction below is synchronous. Missing this is what made `graft
@@ -179,6 +198,10 @@ export async function checkGraph(
     arr.sort();
   }
 
+  // After the extraction loop, so only grammars this repo actually needed appear.
+  result.grammarWarnings = grammarFailures().map(
+    (f) => `${f.lang}: ${f.module} could not be loaded — ${f.error}`,
+  );
   result.ok =
     !result.extensionsChanged &&
     result.extensionHealth?.ok !== false &&
@@ -199,7 +222,16 @@ export function formatGraphCheckReport(r: GraphCheckResult): string {
     // the repo was never deep-built or a deep build failed most of its calls.
     const pct = r.nodes > 0 ? Math.round(((r.nodes - r.pending) / r.nodes) * 100) : 0;
     const note = r.pending ? ` (${formatPendingNote(r, pct)})` : "";
-    return `graph check: OK — the wiring graph is in sync with the code.${note}`;
+    // OK, and still say what was missing. The graph matches the source; it was built
+    // with fewer parsers than a healthy install has, and the person reading this is
+    // the only one who can do anything about that.
+    const degradedNote = (r.grammarWarnings ?? []).length
+      ? "\n\n" +
+        (r.grammarWarnings ?? []).map((w) => `! ${w}`).join("\n") +
+        "\nThose files were indexed without a depth-tier parser. Reinstall to restore " +
+        "them; the next build will re-parse them automatically."
+      : "";
+    return `graph check: OK — the wiring graph is in sync with the code.${note}${degradedNote}`;
   }
 
   const structural = r.added.length + r.removed.length + r.changed.length;
@@ -226,6 +258,7 @@ export function formatGraphCheckReport(r: GraphCheckResult): string {
   lines.push("");
   if (structural) lines.push("Run `inarch build` to rebuild the structure, then commit graft/.");
   if (r.stale.length) lines.push("Run `inarch build --deep` to refresh stale summaries.");
+  for (const w of r.grammarWarnings ?? []) lines.push(`! ${w}`);
   return lines.join("\n");
 }
 

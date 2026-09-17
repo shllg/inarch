@@ -38,8 +38,21 @@ export interface GenericLang {
   wasm: string;
 }
 
-/** The breadth registry. Add a row + a queries/<name>.scm to support a language.
- * Extensions here must NOT collide with the depth tier's EXTENSIONS (extract.ts). */
+/**
+ * The breadth registry. Add a row + a queries/<name>.scm to support a language.
+ *
+ * Extensions here MAY collide with the depth tier's EXTENSIONS (extract.ts), and for
+ * several rows that collision is the whole point. `languageOf` is consulted first and
+ * `genericLangOf` only when it returns null, so a row whose extension the depth tier
+ * claims is dormant — until that depth grammar fails to load, at which point
+ * `languageOf` stops claiming it and this row catches the files (T2).
+ *
+ * A fallback row goes in where the WASM grammar already ships in the bundle AND a
+ * queries/<name>.scm already exists. That is the whole of kotlin, swift and php, and
+ * java, cpp, c and ruby were already here. typescript, tsx, python, go and r have a
+ * wasm but no query, so a failure there still degrades to a file node only — the
+ * honest state, and one `inarch check` reports rather than hides.
+ */
 export const GENERIC_LANGS: readonly GenericLang[] = [
   { name: "rust", exts: [".rs"], wasm: "rust" },
   { name: "java", exts: [".java"], wasm: "java" },
@@ -58,6 +71,10 @@ export const GENERIC_LANGS: readonly GenericLang[] = [
   { name: "clojure", exts: [".clj", ".cljs", ".cljc", ".bb"], wasm: "clojure" },
   { name: "nix", exts: [".nix"], wasm: "nix" },
   { name: "lua", exts: [".lua"], wasm: "lua" },
+  // Depth-tier fallbacks (T2). Dormant while the native grammar loads.
+  { name: "kotlin", exts: [".kt", ".kts"], wasm: "kotlin" },
+  { name: "swift", exts: [".swift"], wasm: "swift" },
+  { name: "php", exts: [".php"], wasm: "php" },
 ];
 
 const byExt = new Map<string, GenericLang>();

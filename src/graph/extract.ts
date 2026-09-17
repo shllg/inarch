@@ -6,17 +6,8 @@
  * arrow-function consts) plus unresolved edge intents. Edge *targets* are
  * resolved against the whole-repo node index later, in build.ts.
  */
-import Parser from "tree-sitter";
-import TypeScript from "tree-sitter-typescript";
-import Python from "tree-sitter-python";
-import Go from "tree-sitter-go";
-import Cpp from "tree-sitter-cpp";
-import R from "tree-sitter-r";
-import Ruby from "tree-sitter-ruby";
-import Java from "tree-sitter-java";
-import Kotlin from "tree-sitter-kotlin";
-import Swift from "tree-sitter-swift";
-import PHP from "tree-sitter-php";
+import type Parser from "tree-sitter";
+import { createRequire } from "node:module";
 import { basename } from "node:path";
 import { contentHash } from "../util/id.js";
 import { associationConstant, camelize } from "./zeitwerk.js";
@@ -106,14 +97,33 @@ const EXTENSIONS: ReadonlyArray<{ ext: string; grammar: Language; label: string 
   { ext: ".r", grammar: "r", label: "r" },
 ];
 
+/**
+ * The depth-tier row for a path — and only when that row's grammar actually loaded.
+ *
+ * Filtering here rather than at each call site is the design: `languageOf` returns
+ * null, so `build.ts` and `check.ts` fall through to `genericLangOf` exactly as they
+ * already do for a language the depth tier never had. No pipeline stage learns about
+ * degradation; it just sees one fewer depth language.
+ *
+ * Longest-suffix-first still holds, and the fallback within a family is real: with the
+ * cpp grammar broken, `.h` stops being claimed here and the breadth tier's `c` row
+ * takes it.
+ */
 function entryFor(path: string): (typeof EXTENSIONS)[number] | undefined {
   const p = path.toLowerCase();
-  return EXTENSIONS.find((e) => p.endsWith(e.ext));
+  return EXTENSIONS.find((e) => p.endsWith(e.ext) && grammarFor(e.grammar) !== null);
+}
+
+/** Every extension the depth tier is BUILT to claim, whether or not its grammar
+ * loaded. File discovery has to keep finding `.kt` files for the breadth tier to
+ * index them, so this one deliberately does not filter. */
+function allDepthEntries(): ReadonlyArray<(typeof EXTENSIONS)[number]> {
+  return EXTENSIONS;
 }
 
 /** Every file extension a depth-tier (hand-written) extractor claims. */
 export function depthExtensions(): string[] {
-  return EXTENSIONS.map((e) => e.ext);
+  return allDepthEntries().map((e) => e.ext);
 }
 
 /** Map a file path to a supported language, or null if unsupported. */
@@ -594,20 +604,218 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
 const EMPTY_MAP: ReadonlyMap<string, "protected" | "private"> = new Map();
 const EMPTY_NESTING: readonly string[] = [];
 
-const parser = new Parser();
-const GRAMMARS: Record<Language, unknown> = {
-  typescript: TypeScript.typescript,
-  tsx: TypeScript.tsx,
-  python: Python,
-  go: Go,
-  cpp: Cpp,
-  r: R,
-  ruby: Ruby,
-  java: Java,
-  kotlin: Kotlin,
-  swift: Swift,
-  php: PHP.php,
+// ---------------------------------------------------------------------------
+// T2: native grammars load one at a time, and any of them may fail.
+// ---------------------------------------------------------------------------
+//
+// These used to be eleven static imports and one module-level `new Parser()`, so a
+// single unloadable grammar killed the process before argv was read. That is not a
+// hypothetical: `tree-sitter-kotlin` ships no prebuild for every platform/ABI, and on
+// a machine whose npm has `ignore-scripts=true` it never compiles either — after which
+// EVERY command, in a repo with no Kotlin in it, died with
+// `No native build was found … abi=147` and a node-gyp-build stack trace that never
+// said "inarch".
+//
+// Three distinct failures hide behind that one symptom, and conflating them is why the
+// four upstream PRs on this disagree:
+//
+//   1. One grammar cannot load. The other ten are fine.
+//   2. `tree-sitter` ITSELF cannot load — no prebuild for this platform — so every
+//      depth language is gone at once.
+//   3. Install cannot complete, so the package never landed. Load-time care cannot
+//      reach that one; `optionalDependencies` in package.json is what does.
+//
+// This module answers 1 and 2 the same way: require lazily, catch, record the real
+// error text, and let `entryFor` stop claiming the extension. A file whose depth
+// grammar is missing then takes the path a language with no depth grammar already
+// takes — the breadth tier — with no other pipeline stage needing to know.
+const require = createRequire(import.meta.url);
+
+/** Where each language's grammar comes from, and which export on it is the grammar.
+ * The shapes genuinely differ: tree-sitter-typescript exposes two, tree-sitter-php
+ * exposes `.php`, and most expose the module itself. */
+const NATIVE_GRAMMARS: Record<Language, { module: string; pick: (m: never) => unknown }> = {
+  typescript: { module: "tree-sitter-typescript", pick: (m: never) => (m as { typescript: unknown }).typescript },
+  tsx: { module: "tree-sitter-typescript", pick: (m: never) => (m as { tsx: unknown }).tsx },
+  python: { module: "tree-sitter-python", pick: (m: never) => m },
+  go: { module: "tree-sitter-go", pick: (m: never) => m },
+  cpp: { module: "tree-sitter-cpp", pick: (m: never) => m },
+  r: { module: "tree-sitter-r", pick: (m: never) => m },
+  ruby: { module: "tree-sitter-ruby", pick: (m: never) => m },
+  java: { module: "tree-sitter-java", pick: (m: never) => m },
+  kotlin: { module: "tree-sitter-kotlin", pick: (m: never) => m },
+  swift: { module: "tree-sitter-swift", pick: (m: never) => m },
+  php: { module: "tree-sitter-php", pick: (m: never) => (m as { php: unknown }).php },
 };
+
+const ALL_LANGUAGES = Object.keys(NATIVE_GRAMMARS) as Language[];
+
+/** A grammar that could not be loaded, and the loader's own words about why. */
+export interface GrammarFailure {
+  lang: Language;
+  module: string;
+  /** The extensions that stopped being claimed — what the reader will actually look
+   * for in their own repository. */
+  extensions: string[];
+  error: string;
+}
+
+type GrammarSlot = { ok: true; language: unknown } | { ok: false; error: string };
+const grammarCache = new Map<Language, GrammarSlot>();
+
+/** The shared runtime, loaded once. `undefined` = not tried yet, `null` = failed. */
+let runtime: { Parser: new () => Parser } | null | undefined;
+let runtimeError: string | null = null;
+
+function loadRuntime(): { Parser: new () => Parser } | null {
+  if (runtime !== undefined) return runtime;
+  try {
+    // `tree-sitter` is CommonJS and exports the constructor directly.
+    const mod = require("tree-sitter") as new () => Parser;
+    runtime = { Parser: mod };
+  } catch (e) {
+    runtimeError = e instanceof Error ? e.message : String(e);
+    runtime = null;
+  }
+  return runtime;
+}
+
+function grammarSlot(lang: Language): GrammarSlot {
+  const cached = grammarCache.get(lang);
+  if (cached) return cached;
+  // The runtime has to be there first: a grammar module links against it, so with
+  // `tree-sitter` itself missing every grammar fails with the SAME error, and
+  // reporting eleven copies of it would bury the one fact that matters.
+  if (!loadRuntime()) {
+    const slot: GrammarSlot = { ok: false, error: `tree-sitter runtime unavailable: ${runtimeError}` };
+    grammarCache.set(lang, slot);
+    return slot;
+  }
+  const entry = NATIVE_GRAMMARS[lang];
+  let slot: GrammarSlot;
+  try {
+    const language = entry.pick(require(entry.module) as never);
+    slot = language ? { ok: true, language } : { ok: false, error: `${entry.module} loaded but exports no grammar` };
+  } catch (e) {
+    slot = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  grammarCache.set(lang, slot);
+  return slot;
+}
+
+/**
+ * Languages some file actually needed, as opposed to ones merely probed.
+ *
+ * The distinction is the difference between a warning people read and one they learn
+ * to ignore. `loadedGrammarsStamp` has to probe every language — a cache identity that
+ * depended on which files this process happened to see would be worthless — and that
+ * probe populates the failure cache for all eleven. Reporting from the cache alone
+ * therefore told a TypeScript-only repo that Kotlin was broken, which is true and none
+ * of its business.
+ */
+const demanded = new Set<Language>();
+
+/** The grammar for this language, or null when it could not be loaded. Records the
+ * demand, so what is reported is what was needed. */
+function grammarFor(lang: Language): unknown | null {
+  demanded.add(lang);
+  const slot = grammarSlot(lang);
+  return slot.ok ? slot.language : null;
+}
+
+/**
+ * Every depth grammar that failed, with the loader's real error text.
+ *
+ * Only grammars that have been ASKED for appear here, which is the point: a repo with
+ * no Kotlin in it never touches the Kotlin row and stays completely quiet. Silence
+ * here is not a claim that everything loaded, it is a claim that nothing needed was
+ * missing.
+ */
+export function grammarFailures(): GrammarFailure[] {
+  const out: GrammarFailure[] = [];
+  for (const lang of ALL_LANGUAGES) {
+    if (!demanded.has(lang)) continue;
+    const slot = grammarCache.get(lang);
+    if (slot && !slot.ok)
+      out.push({
+        lang,
+        module: NATIVE_GRAMMARS[lang].module,
+        extensions: EXTENSIONS.filter((e) => e.grammar === lang).map((e) => e.ext),
+        error: slot.error,
+      });
+  }
+  return out;
+}
+
+/** True when `tree-sitter` itself could not be loaded — failure mode 2, where every
+ * depth language degrades together rather than one at a time. */
+export function runtimeUnavailable(): boolean {
+  return loadRuntime() === null;
+}
+
+/**
+ * The set of depth grammars that actually loaded, as a stable string.
+ *
+ * This is the input {@link extractorStamp} was missing. Until grammars could fail,
+ * which ones loaded could not vary, so the stamp did not include it — and the moment
+ * it can vary, a run with Kotlin broken caches `.kt` files as breadth-tier or absent,
+ * the user reinstalls, the stamp computes identical, the cache hits, and the degraded
+ * parse replays forever. Silently, because a cache hit prints nothing: the user did
+ * the one thing the warning asked and the graph did not change.
+ *
+ * Probes every language rather than reporting what happens to be cached, so the answer
+ * does not depend on which files this process has seen.
+ */
+export function loadedGrammarsStamp(): string {
+  return ALL_LANGUAGES.filter((l) => grammarSlot(l).ok).join(",");
+}
+
+/** Forget which languages were needed, so a test can build two repos in one process
+ * and have the second one report only its own. */
+export function resetDemandForTest(): void {
+  demanded.clear();
+}
+
+/**
+ * Make a grammar fail, or restore it, from a test. Returns the previous slot so the
+ * test can put it back.
+ *
+ * In-process and deliberately so: the failure being modelled is a `require` that
+ * throws, and a test that shells out to a doctored install proves something about the
+ * install rather than about this code.
+ */
+export function setGrammarForTest(lang: Language, slot: GrammarSlot | null): GrammarSlot | null {
+  const previous = grammarCache.get(lang) ?? null;
+  if (slot) grammarCache.set(lang, slot);
+  else {
+    grammarCache.delete(lang);
+    demanded.delete(lang);
+  }
+  return previous;
+}
+
+/** Force the shared-runtime failure (mode 2) for a test, or restore it. */
+export function setRuntimeForTest(broken: boolean): void {
+  if (broken) {
+    runtime = null;
+    runtimeError = "forced by test";
+    grammarCache.clear();
+  } else {
+    runtime = undefined;
+    runtimeError = null;
+    grammarCache.clear();
+    demanded.clear();
+  }
+}
+
+let parserInstance: Parser | null = null;
+function sharedParser(): Parser | null {
+  if (parserInstance) return parserInstance;
+  const rt = loadRuntime();
+  if (!rt) return null;
+  parserInstance = new rt.Parser();
+  return parserInstance;
+}
 
 export interface WalkCtx {
   rel: string;
@@ -758,13 +966,48 @@ interface DefDescriptor {
  * no such limit as long as each returned chunk is under 32 KB, so we always feed
  * the source in <32 KB slices. Code-unit indexing matches `String.slice`. */
 const PARSE_CHUNK = 16384;
-function parseSource(source: string): Parser.SyntaxNode {
+function parseSource(parser: Parser, source: string): Parser.SyntaxNode {
   return parser.parse((index: number) => source.slice(index, index + PARSE_CHUNK)).rootNode;
 }
 
+/**
+ * The file node on its own — what a file is worth when its grammar is gone.
+ *
+ * `extractFile` must not throw for a missing grammar. Callers reach it through
+ * `languageOf`, which no longer claims an extension whose grammar failed, but the
+ * container tier gets here another way: a `.vue` file's `<script lang="ts">` calls
+ * `extractFile(…, "typescript")` without ever consulting `languageOf`. That path has
+ * to degrade rather than take the build down with it.
+ */
+function fileOnly(rel: string, source: string): ExtractResult {
+  return {
+    nodes: [
+      {
+        id: rel,
+        name: basename(rel),
+        kind: "file",
+        path: rel,
+        span: `L1-L${source.split("\n").length}`,
+        signature: null,
+        exported: true,
+        origin: "ast",
+        body_hash: contentHash(source),
+        chars: source.length,
+        summary_state: "pending",
+        summary: null,
+        crux: null,
+      },
+    ],
+    rawEdges: [],
+  };
+}
+
 export function extractFile(rel: string, source: string, lang: Language, opts: ExtractOptions = {}): ExtractResult {
-  parser.setLanguage(GRAMMARS[lang] as never);
-  const root = parseSource(source);
+  const grammar = grammarFor(lang);
+  const parser = grammar === null ? null : sharedParser();
+  if (!parser || grammar === null) return fileOnly(rel, source);
+  parser.setLanguage(grammar as never);
+  const root = parseSource(parser, source);
   const bindings = collectBindings(root, lang, opts.rails != null);
   const importedSymbols = collectImportedSymbols(root, lang);
   const rGenerics = lang === "r" ? collectRGenerics(root) : EMPTY_SET;
