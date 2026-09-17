@@ -1230,7 +1230,12 @@ export function resolveEdges(
         // which resolve the same way: a file's own unambiguous declaration is not an
         // inference. The self-target check keeps a recursive type (`interface Tree {
         // kids: Tree[] }`) from becoming a self-loop.
-        const refKinds: Kind[] = ["interface", "type", "class", "enum"];
+        //
+        // T8 widened this arm to value positions, and they do NOT share a kind list:
+        // a `type_identifier` landing on a same-named `function` would be a wrong
+        // answer in the one place this project cares most about. The value branch
+        // states its own `kinds`; a type reference carries none and keeps this list.
+        const refKinds: Kind[] = e.kinds ?? ["interface", "type", "class", "enum"];
         const local = (perFileName.get(e.file)?.get(e.name) ?? []).filter((n) =>
           refKinds.includes(n.kind),
         );

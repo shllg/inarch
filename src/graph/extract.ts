@@ -1615,6 +1615,48 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
         name: node.text,
         file: ctx.rel,
       });
+    } else if (
+      (ctx.lang === "typescript" || ctx.lang === "tsx") &&
+      node.type === "identifier" &&
+      ctx.parentId !== ctx.rel &&
+      !isTsHeritageName(node) &&
+      !boundInLocalScope(node, node.text, true)
+    ) {
+      // T8, the value half of the same question T4 answered for types: `rows.map(fromApi)`
+      // and `new LocalError()` name something this file declares, in VALUE position.
+      // `new Foo()` is the sharper case — `new_expression` is not in TypeScript's
+      // call-type set, so a same-file constructor use produced no edge of ANY kind.
+      //
+      // `kinds` narrows resolve.ts's shared arm to what a value position can mean. A
+      // `type_identifier` must never land on a function of the same name, and without
+      // this the two halves would share one kind list and exactly that would happen.
+      //
+      // Two guards, both measured rather than reasoned:
+      //
+      //   - `ctx.parentId !== ctx.rel` — only inside a definition. The React idiom
+      //     `Widget.displayName = 'Widget'` sits at the file's top level, so its source
+      //     is the file node, which already `contains` the target. 128 of those on
+      //     dailywerk, every one of them saying nothing.
+      //   - `isTsHeritageName` — `class B extends A` already emits an `extends` edge,
+      //     and `A` there is a plain `identifier`, not the `type_identifier` T4's own
+      //     heritage exclusion catches. Without this the base class gained a second,
+      //     weaker edge saying the same thing.
+      //   - `boundInLocalScope(…, true)` — `const`/`let`/`var` bindings count here,
+      //     unlike the call arm. A reference sits in arbitrary value position, where a
+      //     plain `const total = 0` shadowing a top-level `function total` reaches past
+      //     the binding. Parameters-only emits 269 edges with 10 of that mistake; this
+      //     emits 145 with none. It costs the 114 references to a `const`-bound arrow,
+      //     which WOULD have been correct — that binding mints a node — but a `const`
+      //     cannot be told from the plain-value case without duplicating the minting
+      //     rules. A nested `function` or `class` DECLARATION is not affected either
+      //     way: it always mints a node, so its references stay.
+      edges.push({
+        source: ctx.parentId,
+        relation: "references",
+        name: node.text,
+        file: ctx.rel,
+        kinds: ["function", "class", "enum"],
+      });
     }
   }
 
@@ -1942,7 +1984,11 @@ function isLocalParameterCall(
   if (ctx.lang !== "typescript" && ctx.lang !== "tsx") return false;
   if (callee.viaMember) return false;
   if (ctx.importedSymbols.has(callee.name)) return false;
-  return boundByEnclosingParameter(node, callee.name);
+  // `false`: parameters only. A nested `const fn = () => {}` mints a node, so a CALL
+  // to it already resolves same-file at `extracted` and must be left alone. The
+  // reference walk passes `true` instead — see T8's branch for the measurement that
+  // makes the two arms differ.
+  return boundInLocalScope(node, callee.name, false);
 }
 
 /**
@@ -1952,17 +1998,48 @@ function isLocalParameterCall(
  * definition with a node, and T4's same-file `extracted` answers depend on it.
  * Only what is bound INSIDE some enclosing function counts.
  */
-function boundByEnclosingParameter(node: Parser.SyntaxNode, name: string): boolean {
+function boundInLocalScope(
+  node: Parser.SyntaxNode,
+  name: string,
+  declarations: boolean,
+): boolean {
   for (let cur = node.parent; cur && cur.type !== "program"; cur = cur.parent) {
     if (cur.type === "catch_clause") {
       const caught = cur.childForFieldName("parameter");
       if (caught && patternBinds(caught, name)) return true;
       continue;
     }
+    if (declarations && declaresLocally(cur, name)) return true;
     if (!isFunctionBoundary(cur)) continue;
     // An arrow with parentheses has `parameters`; `each => each()` has `parameter`.
     const params = cur.childForFieldName("parameters") ?? cur.childForFieldName("parameter");
     if (params && patternBinds(params, name)) return true;
+  }
+  return false;
+}
+
+/**
+ * A `const`/`let`/`var` declared directly in this block or loop head.
+ *
+ * Only the block's own statements, never a nested block's: a name declared inside an
+ * `if` body is not bound in the code after it, and treating it as bound would drop a
+ * correct edge. The walk visits each enclosing block in turn, so an outer block's
+ * declarations are still seen — one level at a time, which is what scoping means.
+ */
+function declaresLocally(node: Parser.SyntaxNode, name: string): boolean {
+  if (
+    node.type !== "statement_block" &&
+    node.type !== "for_statement" &&
+    node.type !== "for_in_statement"
+  )
+    return false;
+  for (const statement of node.namedChildren) {
+    if (statement.type !== "lexical_declaration" && statement.type !== "variable_declaration")
+      continue;
+    for (const declarator of statement.namedChildren) {
+      const bound = declarator.childForFieldName("name");
+      if (bound && patternBinds(bound, name)) return true;
+    }
   }
   return false;
 }
@@ -2097,6 +2174,19 @@ function shadowedByTypeParameter(node: Parser.SyntaxNode): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Is this identifier the name in a heritage clause — `class B extends A`,
+ * `class B implements I`?
+ *
+ * {@link isTsTypeUse} excludes the same two clauses, but only sees `type_identifier`.
+ * In a class heritage TypeScript spells the base as a plain `identifier`, so the
+ * value walk needs its own check or the `extends` edge gets a shadow.
+ */
+function isTsHeritageName(node: Parser.SyntaxNode): boolean {
+  const parent = node.parent?.type;
+  return parent === "extends_clause" || parent === "implements_clause";
 }
 
 function isTsTypeUse(node: Parser.SyntaxNode, lang: Language): boolean {
