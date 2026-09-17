@@ -1667,18 +1667,31 @@ function pickRubyConstant(
       return null;
     return { id: c.id, confidence: c.path === file ? "extracted" : "inferred" };
   }
+  // The autoload map goes FIRST, and the order is the whole fix. Zeitwerk names one
+  // file as the definition of a constant; every other file that writes `class Intake`
+  // is opening a namespace to nest something in it. Asking the same-file question
+  // before the map meant a two-line wrapper outranked the 240-line model sitting in
+  // `app/models/intake.rb` — so `Intake::Webhook < Intake`, plain Rails STI, answered
+  // "what do I inherit from" with a stub, and `TurnProvenance.from_metadata` pointed
+  // at a file that does not define `from_metadata`. 21 edges on dailywerk at
+  // `3fabcfa1`, 18 `references` and 3 `extends`, and none of them a close call.
+  //
+  // A home in THIS file still reports `extracted`: the two branches agree there, and
+  // the confidence describes how the name was matched, not which branch matched it.
+  if (zeitwerk) {
+    const homed = candidates.filter((c) => isAutoloadHome(zeitwerk, c.path, fqn));
+    if (homed.length === 1)
+      return { id: homed[0].id, confidence: homed[0].path === file ? "extracted" : "inferred" };
+  }
   // Several nodes in THIS file are one reopened constant, not a choice — unlike
   // `resolveName`'s same-file branch, which requires uniqueness because there a
   // second node means a genuinely different symbol (`Alpha.Builder` vs
   // `Beta.Builder`). Here the ids agree on the whole constant path, so document
-  // order is a deterministic pointer at a real part of the same thing.
+  // order is a deterministic pointer at a real part of the same thing. This is also
+  // where a file that is its own home but reopens the constant twice lands, because
+  // both nodes are then homed and the map declines to choose between them.
   const sameFile = candidates.filter((c) => c.path === file);
   if (sameFile.length > 0) return { id: sameFile[0].id, confidence: "extracted" };
-  // Different files: only the autoload map can say which one Ruby would load.
-  if (zeitwerk) {
-    const homed = candidates.filter((c) => isAutoloadHome(zeitwerk, c.path, fqn));
-    if (homed.length === 1) return { id: homed[0].id, confidence: "inferred" };
-  }
   // A caller that only wants the CONSTANT PATH is not choosing between these at
   // all: this index is keyed by fully-qualified name, so every candidate answers
   // that question with the same string. `module Tenancy` in `lib/tenancy.rb` and
