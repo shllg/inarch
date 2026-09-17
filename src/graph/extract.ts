@@ -777,6 +777,37 @@ export function resetDemandForTest(): void {
 }
 
 /**
+ * Every depth grammar, whether it loads, independent of what this repository contains.
+ *
+ * {@link grammarFailures} is demand-gated and must stay that way: a warning about a
+ * language a repo does not use is noise, and noisy warnings get filtered out along
+ * with the ones that matter. But that leaves no way to ASK whether an install is
+ * complete — a half-installed machine looks exactly like a good one until someone
+ * happens to open a file of the missing language, which may be months later and on
+ * someone else's clone.
+ *
+ * So the diagnostic command gets the unconditional answer and nothing else does.
+ * Probing here deliberately does not record demand, so asking the question cannot
+ * change what a build reports.
+ */
+export function grammarHealth(): { loaded: Language[]; unavailable: GrammarFailure[] } {
+  const loaded: Language[] = [];
+  const unavailable: GrammarFailure[] = [];
+  for (const lang of ALL_LANGUAGES) {
+    const slot = grammarSlot(lang);
+    if (slot.ok) loaded.push(lang);
+    else
+      unavailable.push({
+        lang,
+        module: NATIVE_GRAMMARS[lang].module,
+        extensions: EXTENSIONS.filter((e) => e.grammar === lang).map((e) => e.ext),
+        error: slot.error,
+      });
+  }
+  return { loaded, unavailable };
+}
+
+/**
  * Make a grammar fail, or restore it, from a test. Returns the previous slot so the
  * test can put it back.
  *

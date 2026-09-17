@@ -12,7 +12,8 @@ import { Graft } from "./engine.js";
 import { resolveConfig, type EngineConfig } from "./ai/providers.js";
 import type { ProviderKind } from "./ai/llm/factory.js";
 import { formatCheckReport } from "./context/check.js";
-import { formatGraphCheckReport } from "./graph/check.js";
+import { formatGrammarInstallNote, formatGraphCheckReport } from "./graph/check.js";
+import { grammarHealth } from "./graph/extract.js";
 import { buildGraphIfMissing, runInit } from "./claude/init.js";
 import { statuslineWanted } from "./claude/settings-merge.js";
 import { runHostsInit } from "./hosts/init.js";
@@ -516,9 +517,22 @@ program
     const wiringFail = !g.missing && !g.ok;
 
     if (opts.json) {
-      console.log(JSON.stringify({ context: r, graph: g.missing ? null : g }, null, 2));
+      // `grammars` is also inside `graph`, and is repeated here deliberately: whether
+      // this machine's parsers are all present has nothing to do with whether a graph
+      // has been built, and `graph` is null until one has. A fresh checkout asking
+      // "is my install complete?" is exactly the case that needs the answer.
+      console.log(
+        JSON.stringify(
+          { context: r, graph: g.missing ? null : g, grammars: grammarHealth() },
+          null,
+          2,
+        ),
+      );
     } else if (bothMissing) {
-      console.log("inarch check: NO GRAPH\n\nNo graft/ graph found. Run `inarch build` first.");
+      console.log(
+        "inarch check: NO GRAPH\n\nNo graft/ graph found. Run `inarch build` first." +
+          formatGrammarInstallNote(grammarHealth()),
+      );
     } else {
       if (r.missing) {
         console.log(

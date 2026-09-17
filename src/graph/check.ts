@@ -20,7 +20,7 @@
 import { resolve } from "node:path";
 import { relPosix } from "../util/paths.js";
 import { contextDirFor } from "../context/node-file.js";
-import { extractFile, grammarFailures, languageOf } from "./extract.js";
+import { extractFile, grammarFailures, grammarHealth, languageOf } from "./extract.js";
 import { extractGeneric, genericLangOf, warmGenericGrammars } from "./generic.js";
 import { containerLangOf, extractContainer, warmContainerGrammars } from "./container.js";
 import { filterByOnlyDirs, listSourceFiles } from "./source-files.js";
@@ -62,6 +62,17 @@ export interface GraphCheckResult {
    * something you cannot fix from the repository is a check people stop reading.
    */
   grammarWarnings: string[];
+  /**
+   * Install completeness: every depth grammar and whether it loads, regardless of what
+   * this repository contains.
+   *
+   * Distinct from `grammarWarnings`, which is about THIS graph and is demand-gated.
+   * This one is about the machine, and it is here because `check` is the command you
+   * run to ask whether anything is wrong. Always in `--json`, so "all eleven load" is
+   * something a script can assert rather than assume; in the human report only when
+   * something is missing, so a healthy install stays silent.
+   */
+  grammars: { loaded: string[]; unavailable: { lang: string; module: string; extensions: string[]; error: string }[] };
 }
 
 export interface GraphCheckOptions {
@@ -89,6 +100,7 @@ export async function checkGraph(
     pending: 0,
     pendingIds: [],
     grammarWarnings: [],
+    grammars: { loaded: [], unavailable: [] },
     nodes: 0,
   };
 
@@ -202,6 +214,9 @@ export async function checkGraph(
   result.grammarWarnings = grammarFailures().map(
     (f) => `${f.lang}: ${f.module} could not be loaded — ${f.error}`,
   );
+  // Read AFTER grammarWarnings: probing does not record demand, but keeping the order
+  // makes that independence obvious to the next reader rather than a thing to verify.
+  result.grammars = grammarHealth();
   result.ok =
     !result.extensionsChanged &&
     result.extensionHealth?.ok !== false &&
@@ -210,6 +225,34 @@ export async function checkGraph(
     result.changed.length === 0 &&
     result.stale.length === 0;
   return result;
+}
+
+/**
+ * The install-completeness note, or "" when every grammar loads.
+ *
+ * Silent on a healthy machine by design — this is the answer to "is anything missing",
+ * and on a good install the answer is nothing, said by saying nothing. A positive
+ * confirmation is available in `--json`, where `grammars.loaded` can be asserted on.
+ */
+export function formatGrammarInstallNote(
+  health: GraphCheckResult["grammars"] | undefined,
+): string {
+  const missing = health?.unavailable ?? [];
+  if (missing.length === 0) return "";
+  const lines = missing.map(
+    (g) =>
+      `  ! ${g.module} is not available, so ${g.extensions.join("/")} files cannot be ` +
+      `parsed at full depth — ${g.error}`,
+  );
+  return (
+    `\n\ninstall incomplete (${missing.length} of ${missing.length + (health?.loaded.length ?? 0)} ` +
+    `grammars unavailable):\n${lines.join("\n")}\n` +
+    `  Reinstall to restore them; the next build re-parses the affected files automatically.`
+  );
+}
+
+function grammarInstallNote(r: GraphCheckResult): string {
+  return formatGrammarInstallNote(r.grammars);
 }
 
 /** Render a graph-check result as a human-readable report. */
@@ -231,7 +274,7 @@ export function formatGraphCheckReport(r: GraphCheckResult): string {
         "\nThose files were indexed without a depth-tier parser. Reinstall to restore " +
         "them; the next build will re-parse them automatically."
       : "";
-    return `graph check: OK — the wiring graph is in sync with the code.${note}${degradedNote}`;
+    return `graph check: OK — the wiring graph is in sync with the code.${note}${degradedNote}${grammarInstallNote(r)}`;
   }
 
   const structural = r.added.length + r.removed.length + r.changed.length;
@@ -259,7 +302,7 @@ export function formatGraphCheckReport(r: GraphCheckResult): string {
   if (structural) lines.push("Run `inarch build` to rebuild the structure, then commit graft/.");
   if (r.stale.length) lines.push("Run `inarch build --deep` to refresh stale summaries.");
   for (const w of r.grammarWarnings ?? []) lines.push(`! ${w}`);
-  return lines.join("\n");
+  return lines.join("\n") + grammarInstallNote(r);
 }
 
 /** Cap how many pending ids the OK-note lists so a large Tier-1 graph stays readable. */

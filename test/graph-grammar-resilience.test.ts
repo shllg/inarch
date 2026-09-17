@@ -32,11 +32,12 @@ import { promisify } from "node:util";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { buildGraph } from "../src/graph/build.js";
-import { checkGraph } from "../src/graph/check.js";
+import { checkGraph, formatGraphCheckReport } from "../src/graph/check.js";
 import { readGraph, wiringPath } from "../src/graph/write.js";
 import {
   extractFile,
   grammarFailures,
+  grammarHealth,
   languageOf,
   loadedGrammarsStamp,
   resetDemandForTest,
@@ -303,7 +304,106 @@ test("regressing re-parses too: healthy then broken leaves no stale depth-tier n
   }
 });
 
-// ---- 6. the reporting surface ----
+// ---- 6. install completeness: the question a demand-gated warning cannot answer ----
+
+test("check reports every grammar, not only the ones this repo needed", async () => {
+  const dir = plainRepo(); // TypeScript and Ruby; no Kotlin anywhere
+  try {
+    await withBrokenKotlin(async () => {
+      await buildGraph(dir);
+      const c = await checkGraph(dir);
+      assert.deepEqual(c.grammarWarnings, [], "nothing here needed Kotlin, so nothing warns");
+      assert.ok(
+        c.grammars.unavailable.some((g) => g.lang === "kotlin"),
+        "but asking whether the install is complete still gets a straight answer",
+      );
+      assert.ok(c.grammars.loaded.includes("typescript"));
+      assert.ok(!c.grammars.loaded.includes("kotlin"));
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the human report names the missing grammar and what it costs", async () => {
+  const dir = plainRepo();
+  try {
+    await withBrokenKotlin(async () => {
+      await buildGraph(dir);
+      const text = formatGraphCheckReport(await checkGraph(dir));
+      assert.match(text, /install incomplete/);
+      assert.match(text, /tree-sitter-kotlin/, "names the module to reinstall");
+      assert.match(text, /\.kt\/\.kts/, "and the extensions it costs");
+      assert.match(text, /abi=147/, "quoting the loader rather than paraphrasing it");
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a healthy install says nothing about grammars at all", async () => {
+  const dir = plainRepo();
+  try {
+    await buildGraph(dir);
+    const c = await checkGraph(dir);
+    assert.deepEqual(c.grammars.unavailable, [], "this machine is complete");
+    assert.equal(c.grammars.loaded.length, 11, "and says so in --json, for a script to assert");
+    const text = formatGraphCheckReport(c);
+    assert.doesNotMatch(text, /install incomplete/, "silence is the healthy answer");
+    assert.doesNotMatch(text, /grammar/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("asking about health does not change what a build reports", async () => {
+  const dir = plainRepo();
+  try {
+    await withBrokenKotlin(async () => {
+      grammarHealth(); // probes all eleven, which must not count as demand
+      const result = await buildGraph(dir);
+      assert.deepEqual(result.warnings, [], "probing is not using");
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a checkout with no graph yet still answers whether the install is complete", async () => {
+  // The case the first version missed: `graph` is null until something is built, so a
+  // fresh clone asking "is my install OK?" got silence — from the command whose entire
+  // job is to answer that.
+  const dir = mkdtempSync(join(tmpdir(), "graft-resil-nograph-"));
+  put(dir, "a.ts", "export function alpha(): number { return 1 }\n");
+  try {
+    // `check` exits 1 for NO GRAPH, which is correct and predates this — so read the
+    // output off the rejection rather than asserting a zero exit that was never there.
+    const stdout = await run(
+      process.execPath,
+      ["--import", "tsx", join(REPO, "src", "cli.ts"), "check", dir],
+      {
+        cwd: REPO,
+        env: {
+          ...process.env,
+          CI: "1",
+          DO_NOT_TRACK: "1",
+          GRAFT_BREAK_MODULE: "tree-sitter-kotlin",
+          NODE_OPTIONS: `--require ${join(REPO, "test", "break-grammar-preload.cjs")}`,
+        },
+      },
+    ).then(
+      (r) => r.stdout,
+      (e: { stdout?: string }) => e.stdout ?? "",
+    );
+    assert.match(stdout, /NO GRAPH/);
+    assert.match(stdout, /install incomplete/, "and says what is missing anyway");
+    assert.match(stdout, /tree-sitter-kotlin/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---- 7. the reporting surface ----
 
 test("grammarFailures stays empty until something asks for the grammar", async () => {
   const dir = plainRepo();
