@@ -793,6 +793,22 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
         specifier: imported.specifier,
         file: ctx.rel,
       });
+    } else if (isTsTypeUse(node, ctx.lang) && !shadowedByTypeParameter(node)) {
+      // A type the file declares itself is never in `importedSymbols`, so a file's own
+      // types were the one thing it could not see — while a CALL to a same-file symbol
+      // has always resolved. Reference and call disagreed about what a file can see of
+      // itself, and every labelled miss left on the TypeScript corpus was this.
+      //
+      // No specifier, deliberately: resolve.ts binds a specifier-less TypeScript
+      // reference against THIS file only and drops when the name is not uniquely
+      // declared here. It must not fall through to a repo-wide unique name — a type
+      // this file neither imports nor declares is not this file's to resolve.
+      edges.push({
+        source: ctx.parentId,
+        relation: "references",
+        name: node.text,
+        file: ctx.rel,
+      });
     }
   }
 
@@ -1114,9 +1130,10 @@ function isDeclarationName(node: Parser.SyntaxNode): boolean {
  * invisible — a service module's contract with the rest of the app is mostly its
  * types, and `blast` could not see any of it.
  *
- * No allow-list of built-ins is needed and none should be added: the caller emits an
- * edge only for a name in `ctx.importedSymbols`, and `Promise`, `Array` and `Record`
- * are not imported. The import requirement does that work by construction.
+ * No allow-list of built-ins is needed and none should be added. This used to be the
+ * import requirement's doing — `Promise`, `Array` and `Record` are not imported — and
+ * since T4 emits for same-file types too, it is resolution's: no file declares them,
+ * so the same-file lookup finds nothing and drops. Either way, by construction.
  *
  * Two positions are excluded, both because the name there is not the file's to
  * resolve:
@@ -1129,6 +1146,29 @@ function isDeclarationName(node: Parser.SyntaxNode): boolean {
  *     `implements Iface` names its type with a `type_identifier`, so without this it
  *     would acquire a second, redundant `references` edge beside the first.
  */
+/**
+ * Is this `type_identifier` actually a type PARAMETER in scope, rather than the
+ * same-named type the file declares?
+ *
+ * `interface Shadow {...}` beside `function f<Shadow>(x: Shadow)` is legal and the
+ * annotation means the parameter, not the interface. A type parameter is not a graph
+ * node, so without this the name would fall through to the file's declaration and
+ * produce a confident edge to the wrong target. Rare, but it is a wrong edge, and a
+ * wrong edge costs more than a missing one.
+ */
+function shadowedByTypeParameter(node: Parser.SyntaxNode): boolean {
+  const name = node.text;
+  for (let scope = node.parent; scope; scope = scope.parent) {
+    const params = scope.childForFieldName("type_parameters");
+    if (!params) continue;
+    for (const param of params.namedChildren) {
+      if (param.type !== "type_parameter") continue;
+      if (param.childForFieldName("name")?.text === name) return true;
+    }
+  }
+  return false;
+}
+
 function isTsTypeUse(node: Parser.SyntaxNode, lang: Language): boolean {
   if (lang !== "typescript" && lang !== "tsx") return false;
   if (node.type !== "type_identifier") return false;

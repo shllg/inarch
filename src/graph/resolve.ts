@@ -20,6 +20,12 @@ import { genericLangOf } from "./generic.js";
 
 const IMPORT_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 /** C/C++ source + header extensions, for resolving `#include` targets. */
+/** Files the TypeScript and TSX grammars parse. `.js`/`.jsx` belong in the set:
+ * extract.ts parses them with those grammars, so `ctx.lang` is `typescript`/`tsx`
+ * there too. The extract side gates on the grammar, and this must cover the same
+ * files or the two halves disagree about which ones they are talking about. */
+const JS_EXT = /\.(m|c)?[jt]sx?$/i;
+
 const C_EXT = /\.(c|h|cc|cpp|cxx|hpp|hh|hxx|inl|ipp|c\+\+|h\+\+)$/i;
 /** Python source + stub extensions, for the constructor-call fallback below. */
 const PY_EXT = /\.pyi?$/i;
@@ -257,6 +263,29 @@ export function resolveEdges(
         if (hit && hit.id !== e.source && anno?.signature?.includes("@interface"))
           add(e.source, hit.id, "references", hit.confidence);
         else add(e.source, e.name, "references", "inferred");
+      } else if (JS_EXT.test(e.file) && byId.get(e.source)?.origin === "ast") {
+        // T4: a TypeScript type position naming a type THIS FILE declares. The extract
+        // walk emits it without a specifier precisely because there is no module to
+        // name — the declaration is right here.
+        //
+        // Same-file and unique, and nothing more. `resolveName` would be the obvious
+        // call and it is the wrong one: its second tier answers with a repo-wide
+        // unique name, which is how a Go builtin once resolved into a TypeScript test.
+        // A type a file neither imports nor declares is not that file's to resolve, so
+        // the correct output is no edge. Uniqueness is not a formality either —
+        // interface merging makes `interface Merged` twice in one file emit two nodes,
+        // and picking either is a guess.
+        //
+        // `extracted`, matching the PHP-attribute and Java-annotation arms above,
+        // which resolve the same way: a file's own unambiguous declaration is not an
+        // inference. The self-target check keeps a recursive type (`interface Tree {
+        // kids: Tree[] }`) from becoming a self-loop.
+        const refKinds: Kind[] = ["interface", "type", "class", "enum"];
+        const local = (perFileName.get(e.file)?.get(e.name) ?? []).filter((n) =>
+          refKinds.includes(n.kind),
+        );
+        if (local.length === 1 && local[0].id !== e.source)
+          add(e.source, local[0].id, "references", "extracted");
       } else if (byId.get(e.source)?.origin === "generic") {
         // Breadth tier: a bare-name structural reference (extends / implements /
         // object-creation / module alias) the grammar marked but cannot type. Resolve
