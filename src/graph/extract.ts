@@ -2057,6 +2057,81 @@ function describe(node: Parser.SyntaxNode, ctx: WalkCtx): DefDescriptor | null {
         hashNode: node,
       };
     }
+    // `const Button = forwardRef((props, ref) => …)` declares exactly what
+    // `const Button = (props) => …` declares; it just hands the body to a wrapper on
+    // the way. Reading only the first form cost a React codebase nearly its whole
+    // shared component layer — 68 of DailyWerk's 71 such components had no node at
+    // all, so `<Alert>` in 54 files pointed at nothing and a call could not even be
+    // ambiguous about them.
+    const nameNode = node.childForFieldName("name");
+    const wrapped = value && nameNode?.type === "identifier" && isComponentName(nameNode.text)
+      ? wrappedFunctionValue(value)
+      : null;
+    if (wrapped) {
+      const name = nameNode!.text;
+      const wbody = wrapped.childForFieldName("body");
+      // The header runs to the inner body, so the signature carries `forwardRef<…>`
+      // and the parameter list — which is what a reader needs to tell these apart.
+      return {
+        name,
+        kind: "function",
+        headerEnd: wbody ? wbody.startIndex : node.endIndex,
+        hashNode: node,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Does this name belong to a React component?
+ *
+ * Not a style preference — JSX enforces it. A lowercase tag is a DOM element, so any
+ * component written as `<X />` must be capitalised, and the capital is therefore
+ * evidence rather than convention.
+ *
+ * It is what separates the two things `const x = someCall(fn)` can mean. Without it,
+ * accepting a direct function literal swept up every `const authState = useMemo(() =>
+ * …, [])` in the repo — a hook returning a VALUE, recorded as a function — and took
+ * dailywerk from 71 expected new definitions to 782, most of them wrong. A wrapper
+ * cannot be told from a hook by the shape of its argument; both take a function. It
+ * can be told by what the result is allowed to be called.
+ */
+function isComponentName(name: string): boolean {
+  const first = name[0];
+  return first !== undefined && first === first.toUpperCase() && first !== first.toLowerCase();
+}
+
+/**
+ * The function literal a wrapping call declares, or null if the call declares none.
+ *
+ * The argument must be a function literal passed DIRECTLY. That is the whole of the
+ * precision argument: a direct function literal is a body being declared here, while
+ * anything else is a value being computed, and the two are not the same claim.
+ * Measured against DailyWerk, the line falls exactly where it should —
+ * `forwardRef((props, ref) => …)` and `memo(function Inner() {…})` are accepted;
+ * `createContext(null)`, `createFileRoute('/dash')` and `Object.assign(a, b)` are not.
+ *
+ * A function nested inside an object argument is deliberately NOT enough.
+ * `meta.story({ render: () => … })` is configuration that happens to contain a
+ * callback, and accepting it would turn 207 Storybook stories into definitions.
+ *
+ * `memo(Existing)` is declined too: it names no body, and the body it wraps already
+ * has a node of its own. An alias is not a second definition.
+ */
+function wrappedFunctionValue(value: Parser.SyntaxNode): Parser.SyntaxNode | null {
+  // `memo(fn) as typeof fn` — the cast is not the declaration; look through it.
+  let call = value;
+  while (call.type === "as_expression" || call.type === "satisfies_expression") {
+    const inner = call.namedChildren[0];
+    if (!inner) return null;
+    call = inner;
+  }
+  if (call.type !== "call_expression") return null;
+  const args = call.childForFieldName("arguments");
+  if (!args) return null;
+  for (const arg of args.namedChildren) {
+    if (FUNCTION_VALUE_TYPES.has(arg.type)) return arg;
   }
   return null;
 }
