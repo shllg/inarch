@@ -59,6 +59,20 @@ const GEMFILE_RAILS = /^\s*gem\s+['"]rails['"]/m;
 const AUTOLOAD_LINE = /config\.(?:eager_load_paths|autoload_paths|autoload_once_paths)\s*(?:<<|\+=|=)\s*(.+)/g;
 const PATH_FRAGMENT = /['"]([^'"]+)['"]/g;
 
+/**
+ * `config.autoload_lib(ignore: %w[assets tasks])` — the Rails 7.1 spelling that
+ * replaced pushing `lib` onto `config.autoload_paths` by hand, and the one both
+ * corpus apps use. Both halves matter. Without the root, `lib/tenancy.rb` is not
+ * the home of `Tenancy` and a file that merely opens `module Tenancy` outranks it.
+ * Without the ignore list, every `lib/tasks/*.rb` claims a constant Rails never
+ * autoloads — which is the whole reason the argument exists: eager-loading
+ * `lib/rubo_cop` at boot raises LoadError, so apps name it here.
+ */
+const AUTOLOAD_LIB = /config\.autoload_lib(?:_once)?\s*(?:\(([^)]*)\))?/g;
+
+/** `%w[a b]`, `%w(a b)`, `%w{a b}` — the list spelling `ignore:` almost always takes. */
+const WORD_ARRAY = /%[wi][[({]([^\])}]*)[\])}]/;
+
 /** `inflect.acronym "API"` inside `config/initializers/inflections.rb`. */
 const ACRONYM = /\binflect\.acronym\s+['"]([^'"]+)['"]/g;
 
@@ -93,11 +107,14 @@ export function discoverZeitwerk(root: string, repoFiles: string[]): ZeitwerkMap
   if (!GEMFILE_RAILS.test(read(posix.join(root, gemfile)) ?? "")) return null;
 
   const acronyms = readAcronyms(root, relSet);
-  const roots = discoverRoots(root, rels);
+  const { roots, ignored } = discoverRoots(root, rels);
 
   const fqnByPath = new Map<string, string>();
   for (const rel of rels) {
     if (!rel.endsWith(".rb")) continue;
+    // An ignored subtree is under a root but is not autoloaded, so it defines no
+    // constant Zeitwerk would find and must not be anyone's home.
+    if (ignored.some((dir) => rel.startsWith(`${dir}/`))) continue;
     // Longest root wins: `app/models/concerns/x.rb` belongs to `app/models/concerns`,
     // not `app/models`. Getting this backwards is what turns `RoleBasedAccessControl`
     // into `Concerns::RoleBasedAccessControl` — a constant that exists nowhere.
@@ -139,7 +156,7 @@ function read(abs: string): string | null {
  * actually exist in the walked file list become roots, so a configured-but-absent
  * path contributes nothing.
  */
-function discoverRoots(root: string, rels: string[]): string[] {
+function discoverRoots(root: string, rels: string[]): { roots: string[]; ignored: string[] } {
   const dirs = new Set<string>();
   for (const rel of rels) {
     let dir = posix.dirname(rel);
@@ -173,7 +190,33 @@ function discoverRoots(root: string, rels: string[]): string[] {
     // segments as separate candidates — each checked against real directories —
     // is safer than assembling a path that may not exist.
   }
-  return [...out];
+
+  const ignored = new Set<string>();
+  for (const call of app.matchAll(AUTOLOAD_LIB)) {
+    if (!dirs.has("lib")) continue;
+    out.add("lib");
+    for (const dir of ignoredDirs(call[1] ?? "")) ignored.add(`lib/${dir}`);
+  }
+  return { roots: [...out], ignored: [...ignored] };
+}
+
+/**
+ * The directory names in an `ignore:` argument. Both spellings appear in the wild —
+ * `%w[assets tasks]` and `["assets", "tasks"]` — and a lone `ignore: "tasks"` is
+ * legal too. Anything absolute or parent-escaping is dropped rather than normalized,
+ * for the same reason a computed autoload path is: a wrong entry here silently
+ * removes a whole subtree from the map.
+ */
+function ignoredDirs(args: string): string[] {
+  const words = WORD_ARRAY.exec(args);
+  const raw = words ? words[1].split(/\s+/) : [...args.matchAll(PATH_FRAGMENT)].map((m) => m[1]);
+  const out: string[] = [];
+  for (const word of raw) {
+    const cleaned = word.replace(/^\/+/, "").replace(/\/+$/, "");
+    if (cleaned === "" || cleaned.startsWith("..")) continue;
+    out.push(cleaned);
+  }
+  return out;
 }
 
 function readAcronyms(root: string, relSet: ReadonlySet<string>): Map<string, string> {

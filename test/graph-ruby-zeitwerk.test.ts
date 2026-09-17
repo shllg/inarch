@@ -248,3 +248,114 @@ test("zeitwerk: an acronym's SPELLING changes the extraction-cache identity", as
   assert.notEqual(key("API"), key("Api"));
   assert.equal(extractInputsKey(null), "plain");
 });
+
+/**
+ * `config.autoload_lib(ignore: …)` — Rails 7.1 replaced pushing `lib` onto
+ * `config.autoload_paths` by hand with this, and both corpus apps use it. Until it
+ * was read, `lib` was not a root, so `lib/tenancy.rb` was not the home of `Tenancy`
+ * and a file that merely opened `module Tenancy` to nest a concern outranked it.
+ * Measured on dailywerk at `3fabcfa1`: 3 references retargeted off the wrapper and
+ * **157 that had been declining as ambiguous** resolved, every sampled one a real
+ * `Tenancy.cross_workspace` or `Tenancy.scoped_bypass?`.
+ */
+const APP_WITH = (body: string) => ({
+  "Gemfile": RAILS.Gemfile,
+  "config/application.rb":
+    `require "rails/all"\nmodule Dummy\n  class Application < Rails::Application\n` +
+    `    ${body}\n  end\nend\n`,
+});
+
+test("zeitwerk: config.autoload_lib makes lib a root", async () => {
+  await withGraph(
+    {
+      ...APP_WITH(`config.autoload_lib(ignore: %w[assets tasks])`),
+      "lib/tenancy.rb": `module Tenancy\n  def self.bypass? = false\nend\n`,
+      "app/models/concerns/tenancy/scoped.rb":
+        `module Tenancy\n  module Scoped\n    def check = Tenancy.bypass?\n  end\nend\n`,
+    },
+    (graph) => {
+      assert.deepEqual(
+        refs(graph, "app/models/concerns/tenancy/scoped.rb#Tenancy.Scoped.check"),
+        ["lib/tenancy.rb#Tenancy"],
+        "the home in lib outranks the namespace wrapper beside the reference",
+      );
+    },
+  );
+});
+
+test("zeitwerk: an ignored lib subdirectory is nobody's home", async () => {
+  // The ignore list only bites on a constant the subdirectory would otherwise own,
+  // so the fixture has to be namespaced: `lib/tasks/report.rb` under root `lib` is
+  // `Tasks::Report`, exactly what `app/services/tasks/report.rb` is. Drop the ignore
+  // list and those are two homes, the map abstains, and the edge disappears. The
+  // argument exists because eager-loading these raises LoadError — a file Rails never
+  // autoloads cannot be the definition site of anything.
+  await withGraph(
+    {
+      ...APP_WITH(`config.autoload_lib(ignore: %w[assets tasks rubo_cop])`),
+      "lib/tasks/report.rb": `module Tasks\n  class Report\n    def self.go = 1\n  end\nend\n`,
+      "app/services/tasks/report.rb": `module Tasks\n  class Report\n    def self.go = 2\n  end\nend\n`,
+      "app/models/user.rb": `class User\n  def run = Tasks::Report.go\nend\n`,
+    },
+    (graph) => {
+      assert.deepEqual(
+        refs(graph, "app/models/user.rb#User.run"),
+        ["app/services/tasks/report.rb#Tasks.Report"],
+        "lib/tasks is ignored, so exactly one home is left",
+      );
+    },
+  );
+});
+
+test("zeitwerk: autoload_lib with a bracketed string list is read the same way", async () => {
+  await withGraph(
+    {
+      ...APP_WITH(`config.autoload_lib(ignore: ["assets", "tasks"])`),
+      "lib/tasks/report.rb": `module Tasks\n  class Report\n    def self.go = 1\n  end\nend\n`,
+      "app/services/tasks/report.rb": `module Tasks\n  class Report\n    def self.go = 2\n  end\nend\n`,
+      "app/models/user.rb": `class User\n  def run = Tasks::Report.go\nend\n`,
+    },
+    (graph) => {
+      assert.deepEqual(
+        refs(graph, "app/models/user.rb#User.run"),
+        ["app/services/tasks/report.rb#Tasks.Report"],
+      );
+    },
+  );
+});
+
+test("zeitwerk: a lib subdirectory that is NOT ignored is a home like any other", async () => {
+  // The other side of the same fixture, and the one that proves the ignore list is
+  // being read rather than `lib` simply never producing namespaced constants.
+  await withGraph(
+    {
+      ...APP_WITH(`config.autoload_lib(ignore: %w[assets rubo_cop])`),
+      "lib/tasks/report.rb": `module Tasks\n  class Report\n    def self.go = 1\n  end\nend\n`,
+      "app/services/tasks/report.rb": `module Tasks\n  class Report\n    def self.go = 2\n  end\nend\n`,
+      "app/models/user.rb": `class User\n  def run = Tasks::Report.go\nend\n`,
+    },
+    (graph) => {
+      assert.deepEqual(refs(graph, "app/models/user.rb#User.run"), [], "two homes, so the map abstains");
+    },
+  );
+});
+
+test("zeitwerk: without autoload_lib, lib is still not a root", async () => {
+  // The guard on the whole change. A default Rails app does not autoload `lib`, and
+  // AMBIGUOUS_THING has to keep resolving to the one reachable home.
+  await withGraph({ ...RAILS, ...AMBIGUOUS_THING }, (graph) => {
+    assert.deepEqual(refs(graph, "app/models/user.rb#User.go"), ["app/models/thing.rb#Thing"]);
+  });
+});
+
+test("zeitwerk: autoload_lib makes two homes genuinely ambiguous again", async () => {
+  // The mirror of the test above, and the reason this is a root rather than a
+  // preference: once `lib` really is autoloaded, `lib/thing.rb` and
+  // `app/models/thing.rb` are two homes for one constant and the map must abstain.
+  await withGraph(
+    { ...APP_WITH(`config.autoload_lib(ignore: %w[tasks])`), ...AMBIGUOUS_THING },
+    (graph) => {
+      assert.deepEqual(refs(graph, "app/models/user.rb#User.go"), []);
+    },
+  );
+});
