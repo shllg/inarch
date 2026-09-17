@@ -585,6 +585,97 @@ function rubyResultPaths(node: Parser.SyntaxNode): Parser.SyntaxNode[] {
  * method return a different class), and a branch this pass cannot read at all
  * withdraws the answer entirely.
  */
+
+/**
+ * Ruby's own contracts, as three tables. None of these is an inference about this
+ * repository — they are what the language guarantees, and they exist so that a
+ * method the repository ADDS to a core class can be reached from its callers.
+ *
+ * Without them a monkey patch is invisible in exactly the direction that matters.
+ * `config/initializers/string_truncate_bytes.rb` defines `String#truncate_bytes` in
+ * dailywerk; the four files that call it had no edge to it, while 76 files that
+ * merely mention `String` in a type check had one (see docs/39, where those 76 were
+ * removed). "Who calls this monkey patch" is the single hardest question to answer
+ * by grep, because the method name is the only clue and nothing in the call site
+ * names the file.
+ *
+ * The blast radius is bounded by construction: a receiver typed as `String` can
+ * only resolve to methods the repository itself defines on `String`. That is ONE
+ * method in dailywerk and NONE in filewerk, so these tables cannot invent an edge
+ * to a class the repository does not patch.
+ */
+const RUBY_LITERAL_TYPE: ReadonlyMap<string, string> = new Map([
+  ["string", "String"],
+  ["bare_string", "String"],
+  ["string_array", "Array"],
+  ["symbol_array", "Array"],
+  ["integer", "Integer"],
+  ["float", "Float"],
+  ["rational", "Rational"],
+  ["complex", "Complex"],
+  ["array", "Array"],
+  ["hash", "Hash"],
+  ["simple_symbol", "Symbol"],
+  ["delimited_symbol", "Symbol"],
+  ["regex", "Regexp"],
+  ["range", "Range"],
+]);
+
+/**
+ * Defined on `Object`, so every receiver answers them, and String by contract. A
+ * class that overrides `to_s` to return a non-String is broken in ways `puts` would
+ * expose long before a graph did. These are the only methods typed without knowing
+ * what the receiver is.
+ */
+const RUBY_UNIVERSAL_TO_STRING: ReadonlySet<string> = new Set(["to_s", "inspect", "to_str"]);
+
+/**
+ * `<core class>#<method>` → what it returns, consulted ONLY when the receiver is
+ * already typed as that class. Keeping the receiver in the key is the whole
+ * precision argument: `strip` means String on a String and means whatever a
+ * repository's `TextNormalizer.strip` says it means, and a table keyed on the bare
+ * name could not tell those apart. That is the language-blind unique-name matching
+ * `test/graph-cross-language.test.ts` exists to forbid, arriving by another door.
+ */
+const RUBY_CORE_RETURNS: ReadonlyMap<string, string> = new Map([
+  ["String#strip", "String"], ["String#lstrip", "String"], ["String#rstrip", "String"],
+  ["String#chomp", "String"], ["String#chop", "String"], ["String#squeeze", "String"],
+  ["String#downcase", "String"], ["String#upcase", "String"], ["String#capitalize", "String"],
+  ["String#swapcase", "String"], ["String#reverse", "String"], ["String#succ", "String"],
+  ["String#scrub", "String"], ["String#force_encoding", "String"], ["String#encode", "String"],
+  ["String#unicode_normalize", "String"], ["String#tr", "String"], ["String#delete", "String"],
+  ["String#center", "String"], ["String#ljust", "String"], ["String#rjust", "String"],
+  ["String#dup", "String"], ["String#freeze", "String"], ["String#b", "String"],
+  ["String#lines", "Array"], ["String#chars", "Array"], ["String#bytes", "Array"],
+  ["String#split", "Array"], ["String#length", "Integer"], ["String#size", "Integer"],
+  ["String#bytesize", "Integer"],
+  ["Array#join", "String"], ["Array#map", "Array"], ["Array#flat_map", "Array"],
+  ["Array#compact", "Array"], ["Array#flatten", "Array"], ["Array#uniq", "Array"],
+  ["Array#sort", "Array"], ["Array#reverse", "Array"], ["Array#to_a", "Array"],
+  ["Array#length", "Integer"], ["Array#size", "Integer"],
+  ["Hash#keys", "Array"], ["Hash#values", "Array"], ["Hash#to_a", "Array"],
+  ["Hash#map", "Array"], ["Hash#merge", "Hash"], ["Hash#to_h", "Hash"],
+]);
+
+/**
+ * Core CLASS methods with a fixed return. `File.read(path)` is a String, and a
+ * local assigned from one is the receiver in two of dailywerk's `truncate_bytes`
+ * call sites.
+ *
+ * The risk this carries and the earlier tables do not: a repository that defines
+ * its OWN top-level `File` or `Dir` would be typed from this table instead. Neither
+ * corpus repository does — the only core constant either of them reopens is
+ * `String` — and a repository that shadows `File` has arranged for every reader to
+ * be wrong, not just this one.
+ */
+const RUBY_CORE_CLASS_RETURNS: ReadonlyMap<string, string> = new Map([
+  ["File#read", "String"], ["File#binread", "String"], ["File#basename", "String"],
+  ["File#dirname", "String"], ["File#extname", "String"], ["File#expand_path", "String"],
+  ["File#join", "String"], ["File#realpath", "String"], ["File#readlines", "Array"],
+  ["Dir#pwd", "String"], ["Dir#home", "String"], ["Dir#glob", "Array"],
+  ["Dir#entries", "Array"], ["Dir#children", "Array"],
+]);
+
 function rubyExprType(node: Parser.SyntaxNode, ctx: RubyTypeCtx, depth = 0): RubyType | null {
   if (depth > 8) return null;
   const recur = (n: Parser.SyntaxNode): RubyType | null => rubyExprType(n, ctx, depth + 1);
@@ -610,14 +701,69 @@ function rubyExprType(node: Parser.SyntaxNode, ctx: RubyTypeCtx, depth = 0): Rub
     const key = rubyScopeKey(node.text, ctx.scope, ctx.classScope, ctx.selfKind);
     return ctx.bindings.lookupRuby(key, node.text, node.startIndex);
   }
+  const literal = RUBY_LITERAL_TYPE.get(node.type);
+  if (literal) return { fqn: literal, kind: "instance" };
   if (node.type !== "call") return null;
   const method = node.childForFieldName("method");
   const receiver = node.childForFieldName("receiver");
   if (!receiver || method?.type !== "identifier") return null;
-  if (receiver.type !== "constant" && receiver.type !== "scope_resolution") return null;
-  const fqn = rubyConstPath(receiver);
-  if (fqn === null) return null;
-  return rubyConstructorType(fqn, method.text, node, ctx);
+  // `x.to_s` is a String whoever `x` is. A block would mean a different call shape
+  // entirely, so it withdraws the answer here as it does for a constructor.
+  if (RUBY_UNIVERSAL_TO_STRING.has(method.text) && !rubyConstructionHasBlock(node))
+    return { fqn: "String", kind: "instance" };
+  // `parts.join("\n")` is a String whatever `parts` is, and the STRING LITERAL is
+  // the evidence rather than an assumption about the receiver. `join` on anything
+  // else in the core library takes no separator — `Thread#join` takes a numeric
+  // timeout — so an argument that is a bare string literal is what tells the two
+  // apart. Without this the chain `doc.paragraphs.map(&:text).join("\n")` cannot be
+  // typed at all, because `map` on an unknown receiver is not an Array by contract.
+  if (method.text === "join" && !rubyConstructionHasBlock(node)) {
+    const args = node.childForFieldName("arguments")?.namedChildren ?? [];
+    if (args.length === 1 && RUBY_LITERAL_TYPE.get(args[0].type) === "String")
+      return { fqn: "String", kind: "instance" };
+  }
+  if (receiver.type === "constant" || receiver.type === "scope_resolution") {
+    const fqn = rubyConstPath(receiver);
+    if (fqn === null) return null;
+    const core = RUBY_CORE_CLASS_RETURNS.get(`${fqn}#${method.text}`);
+    if (core && !rubyConstructionHasBlock(node)) return { fqn: core, kind: "instance" };
+    return rubyConstructorType(fqn, method.text, node, ctx);
+  }
+  // The receiver has to be typed BEFORE the table is consulted — see the comment on
+  // RUBY_CORE_RETURNS for why the bare method name is not enough.
+  const recv = recur(receiver);
+  if (!recv || recv.kind !== "instance") return null;
+  const returns = RUBY_CORE_RETURNS.get(`${recv.fqn}#${method.text}`);
+  return returns && !rubyConstructionHasBlock(node) ? { fqn: returns, kind: "instance" } : null;
+}
+
+/**
+ * What a core method hands back, for a receiver whose class is ALREADY known.
+ * `String` + `strip` → String; the class object `File` + `read` → String.
+ *
+ * This is the step the receiver WALK needs rather than the expression pass: a chain
+ * like `raw.force_encoding(enc).scrub` builds a head of `String` and two steps, and
+ * the step walk in resolve.ts then looks for `String#force_encoding` among the
+ * repository's own nodes and correctly finds nothing. Collapsing the pair here keeps
+ * the receiver flat and the type honest.
+ */
+export function rubyCoreMethodReturn(fqn: string, kind: RubyValueKind, name: string): RubyType | null {
+  const table = kind === "class" ? RUBY_CORE_CLASS_RETURNS : RUBY_CORE_RETURNS;
+  const out = table.get(`${fqn}#${name}`);
+  return out ? { fqn: out, kind: "instance" } : null;
+}
+
+/**
+ * The type of an expression standing in RECEIVER position, for the cases
+ * `rubyReceiverType` cannot walk as a chain: a literal, and a call whose type the
+ * core tables above settle. Kept separate from `rubyExprType` so the receiver walk
+ * keeps its own precedence — a constructor, a bound variable and `self` are all
+ * decided before this is asked.
+ */
+export function rubyCoreExprType(node: Parser.SyntaxNode, ctx: RubyTypeCtx): RubyType | null {
+  const literal = RUBY_LITERAL_TYPE.get(node.type);
+  if (literal) return { fqn: literal, kind: "instance" };
+  return node.type === "call" ? rubyExprType(node, ctx) : null;
 }
 
 /** A constructor block may replace singleton methods on the yielded instance.

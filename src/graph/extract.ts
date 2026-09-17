@@ -14,6 +14,8 @@ import { associationConstant, camelize } from "./zeitwerk.js";
 import {
   collectBindings,
   rubyMethodReturnType,
+  rubyCoreExprType,
+  rubyCoreMethodReturn,
   rubyConstructorType,
   rubyConstructionHasBlock,
   rubyScopeKey,
@@ -3502,6 +3504,12 @@ function rubyReceiverType(node: Parser.SyntaxNode, ctx: WalkCtx): RubyReceiver |
     const bound = rubyLookupVar(node, ctx);
     return bound ? { base: "const", constPath: bound.fqn, kind: bound.kind, finder: bound.finder, steps: [] } : null;
   }
+  // `"hello".truncate_bytes(3)` — a literal receiver names its class outright, and
+  // is the only receiver shape that needs no inference at all.
+  {
+    const core = rubyCoreExprType(node, rubyTypeCtx(ctx));
+    if (core && node.type !== "call") return { base: "const", constPath: core.fqn, kind: core.kind, steps: [] };
+  }
   if (node.type === "call") {
     const method = node.childForFieldName("method");
     if (method?.type !== "identifier") return null;
@@ -3526,7 +3534,23 @@ function rubyReceiverType(node: Parser.SyntaxNode, ctx: WalkCtx): RubyReceiver |
       : rubyIsVar(method, ctx)
         ? null
         : { base: "self", kind: ctx.rubySelfKind, steps: [] };
-    if (!head) return null;
+    // The chain died — `text.join("\n")` where `text` is an untyped parameter, and
+    // every other receiver this walk cannot name. The core tables get the last word
+    // rather than the first, so a repository class that happens to define `strip`
+    // is still decided by the walk above.
+    if (!head) {
+      const core = rubyCoreExprType(node, rubyTypeCtx(ctx));
+      return core ? { base: "const", constPath: core.fqn, kind: core.kind, steps: [] } : null;
+    }
+    // A core method consuming a core receiver, collapsed rather than pushed as a
+    // step: `File.read(path)` is a String and `raw.scrub` is a String, and neither
+    // `File#read` nor `String#scrub` is a node the step walk could resolve against.
+    // Only with an empty step list, so this never reinterprets a chain the walk was
+    // already partway through.
+    if (head.base === "const" && head.constPath && head.steps.length === 0 && !rubyConstructionHasBlock(node)) {
+      const core = rubyCoreMethodReturn(head.constPath, head.kind, method.text);
+      if (core) return { base: "const", constPath: core.fqn, kind: core.kind, steps: [] };
+    }
     if (head.steps.length >= RUBY_RECV_CHAIN_CAP) return null;
     return { ...head, steps: [...head.steps, method.text] };
   }
