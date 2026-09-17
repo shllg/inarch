@@ -278,3 +278,83 @@ end`;
  assert.equal(parsed[0].action,'index');
  assert.equal(parsed[0].pattern,'/right/items');
 });
+
+// ---- forwarded options parameters (T10) ----
+//
+// `request(path, options)` inside a wrapper says nothing about the verb on its own.
+// Two of dailywerk's three unjoined sites were exactly that shape, and the verb is
+// only knowable from what callers pass — so these fixtures all turn on a second file.
+
+const SHOW = 'app/controllers/api/v2/items_controller.rb#Api.V2.ItemsController.show';
+const CREATE = 'app/controllers/api/v2/items_controller.rb#Api.V2.ItemsController.create';
+const wrapper = body => `import { request } from '../client';\n${body}`;
+const caller = body => `import { fetchItem } from './service';\nexport function load() { return ${body} }`;
+
+test('seam: a forwarded options parameter takes the verb its caller passes', async () => {
+  const ctx = context(wrapper("export function fetchItem(id: string, options = {}) { return request(`/items/${id}`, options) }"),
+    routes, { 'web/page.ts': caller("fetchItem('1', { signal: undefined })") });
+  const result = await railsSeam(ctx);
+  assert.equal(result.edges?.length, 1, 'an options object naming no method is GET');
+  assert.equal(result.edges[0].target, SHOW);
+});
+
+test('seam: the verb is read from the argument, never assumed to be GET', async () => {
+  const ctx = context(wrapper("export function fetchItem(options = {}) { return request('/items', options) }"),
+    routes, { 'web/page.ts': caller("fetchItem({ method: 'POST' })") });
+  assert.equal((await railsSeam(ctx)).edges?.[0]?.target, CREATE);
+});
+
+test('seam: an omitted argument falls back to the parameter default', async () => {
+  const ctx = context(wrapper("export function fetchItem(id: string, options = {}) { return request(`/items/${id}`, options) }"),
+    routes, { 'web/page.ts': caller("fetchItem('1')") });
+  assert.equal((await railsSeam(ctx)).edges?.[0]?.target, SHOW);
+});
+
+test('seam: a caller two files away still counts', async () => {
+  // The reason the first attempt at this found no callers at all: `roots` holds only
+  // files that import the client, and a page imports the wrapper instead.
+  const ctx = context(wrapper("export function fetchItem(id: string, options = {}) { return request(`/items/${id}`, options) }"),
+    routes, { 'web/pages/detail.ts': "import { fetchItem } from '../service';\nexport function load() { return fetchItem('1', {}) }" });
+  assert.equal((await railsSeam(ctx)).edges?.[0]?.target, SHOW);
+});
+
+// ---- declines ----
+
+test('seam: callers that disagree about the verb decline', async () => {
+  const ctx = context(wrapper("export function fetchItem(options = {}) { return request('/items', options) }"), routes, {
+    'web/page.ts': caller("fetchItem({ method: 'POST' })"),
+    'web/other.ts': "import { fetchItem } from './service';\nexport function show() { return fetchItem({}) }",
+  });
+  assert.equal((await railsSeam(ctx)).edges?.length ?? 0, 0, 'POST and GET are both possible, so neither is proved');
+});
+
+test('seam: a default nobody falls back to proves nothing', async () => {
+  // No call anywhere. The default reads like GET and is unreachable, so an edge here
+  // would be a claim about a request the application never makes.
+  const ctx = context(wrapper("export function fetchItem(id: string, options = {}) { return request(`/items/${id}`, options) }"), routes);
+  assert.equal((await railsSeam(ctx)).edges?.length ?? 0, 0);
+});
+
+test('seam: one unreadable argument poisons the whole site', async () => {
+  const ctx = context(wrapper("export function fetchItem(options = {}) { return request('/items', options) }"), routes, {
+    'web/page.ts': caller("fetchItem({ method: 'POST' })"),
+    'web/other.ts': "import { fetchItem } from './service';\nexport function relay(passed: any) { return fetchItem(passed) }",
+  });
+  assert.equal((await railsSeam(ctx)).edges?.length ?? 0, 0);
+});
+
+test('seam: a wrapper that is not a function declaration declines', async () => {
+  // An arrow bound to a const, an object method and a class member can each be
+  // re-bound or reached through a receiver, so "every call" stops being enumerable.
+  const ctx = context(wrapper("export const fetchItem = (id: string, options = {}) => request(`/items/${id}`, options)"),
+    routes, { 'web/page.ts': caller("fetchItem('1', {})") });
+  assert.equal((await railsSeam(ctx)).edges?.length ?? 0, 0);
+});
+
+test('seam: a spread or computed method in a forwarded argument still declines', async () => {
+  for (const passed of ["{ ...extra }", "{ method: verb }", "{ ['met' + 'hod']: 'POST' }"]) {
+    const ctx = context(wrapper("export function fetchItem(options = {}) { return request('/items', options) }"), routes,
+      { 'web/page.ts': `import { fetchItem } from './service';\nexport function load(extra: any, verb: string) { return fetchItem(${passed}) }` });
+    assert.equal((await railsSeam(ctx)).edges?.length ?? 0, 0, passed);
+  }
+});

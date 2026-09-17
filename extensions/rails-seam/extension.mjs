@@ -86,16 +86,40 @@ function sourceProgram(ctx, config) {
     reaches.set(file, found);
     return found;
   }
+  const scanned = file => sourceExtension.test(file) && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(file)
+    && config.roots.some(root => file.startsWith(root + '/'));
   const roots = [];
   for (const file of files) {
-    if (!sourceExtension.test(file) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(file)
-      || !config.roots.some(root => file.startsWith(root + '/'))) continue;
+    if (!scanned(file)) continue;
     const source = read(file);
     if (!source || source.parseDiagnostics.length) { parsed.delete(file); continue; }
     const candidate = source.statements.some(statement => ts.isImportDeclaration(statement)
       && typeof statement.moduleSpecifier.text === 'string'
       && reachesClient(resolveModule(statement.moduleSpecifier.text, file)));
     if (candidate) roots.push(file);
+    else parsed.delete(file);
+  }
+  // A second, wider set that exists only so `forwarded()` can ask who calls a client
+  // wrapper. A SITE is a call to the client itself, so it can only ever be in `roots`,
+  // and that set is deliberately narrow: a file qualifies by importing the client, or a
+  // barrel that re-exports it. A wrapper's CALLERS sit one hop further out —
+  // `releaseNotes.ts` calls the client, `ReleaseNoteEditPage.tsx` calls `releaseNotes.ts`
+  // and never the client — so they were not in the program at all and the checker had no
+  // symbol to match them against. That, not the analysis, is why the first attempt at
+  // reading a forwarded options parameter found zero callers for both wrappers.
+  //
+  // Exactly one hop, and only towards a root. Anything wider pulls most of an application
+  // into the program to answer a question about two functions, and `forwarded()` declines
+  // on an unreadable argument anyway, so depth buys nothing. Sites are still scanned from
+  // `roots` alone, so this cannot add one.
+  const rootSet = new Set(roots), callers = [];
+  for (const file of files) {
+    if (rootSet.has(file) || !scanned(file)) continue;
+    const source = read(file);
+    if (!source || source.parseDiagnostics.length) { parsed.delete(file); continue; }
+    if (source.statements.some(statement => ts.isImportDeclaration(statement)
+      && typeof statement.moduleSpecifier.text === 'string'
+      && rootSet.has(resolveModule(statement.moduleSpecifier.text, file)))) callers.push(file);
     else parsed.delete(file);
   }
   const unwrap = name => name.replace(/^\/repo\//, '');
@@ -106,13 +130,16 @@ function sourceProgram(ctx, config) {
     getCanonicalFileName: file => file, useCaseSensitiveFileNames: () => true, getNewLine: () => '\n',
     resolveModuleNames: (names, containing) => names.map(name => {
       const file = resolveModule(name, unwrap(containing));
-      if (!file || !reachesClient(file)) return undefined;
+      // `rootSet` is what lets a caller's `import { getReleaseNote } from '../services/releaseNotes'`
+      // resolve at all. Without it that identifier has no symbol, and `forwarded()` cannot
+      // tell it from an unrelated function of the same name.
+      if (!file || !(reachesClient(file) || rootSet.has(file))) return undefined;
       return { resolvedFileName: `/repo/${file}`, extension: file.endsWith('x') ? ts.Extension.Tsx : ts.Extension.Ts };
     }),
   };
-  const program = ts.createProgram(roots.map(file => `/repo/${file}`), { noLib: true, allowJs: true,
+  const program = ts.createProgram([...roots, ...callers].map(file => `/repo/${file}`), { noLib: true, allowJs: true,
     target: ts.ScriptTarget.Latest, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.Preserve }, host);
-  return { program, checker: program.getTypeChecker(), roots };
+  return { program, checker: program.getTypeChecker(), roots, callers };
 }
 
 function unalias(symbol, checker) {
@@ -195,19 +222,77 @@ function values(node, checker, active = new Set(), queryOnly = false) {
   return null;
 }
 
-function method(node, checker) {
+/** The verb one options object asks for. Absent, or present and naming none, is GET. */
+function verb(node) {
   if (!node) return 'GET';
-  if (ts.isIdentifier(node)) node = constant(node, checker);
-  if (!node || !ts.isObjectLiteralExpression(node)) return null;
-  let verb = 'GET', seen = false;
+  if (!ts.isObjectLiteralExpression(node)) return null;
+  let found = 'GET', seen = false;
   for (const property of node.properties) {
     if (ts.isShorthandPropertyAssignment(property) && property.name.text !== 'method') continue;
     if (!ts.isPropertyAssignment(property) || ts.isComputedPropertyName(property.name)) return null;
     if (property.name.getText().replace(/^["']|["']$/g, '') !== 'method') continue;
     if (seen || !ts.isStringLiteralLike(property.initializer)) return null;
-    verb = property.initializer.text.toUpperCase(); seen = true;
+    found = property.initializer.text.toUpperCase(); seen = true;
   }
-  return /^(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS)$/.test(verb) ? verb : null;
+  return /^(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS)$/.test(found) ? found : null;
+}
+
+// A wrapper that FORWARDS its own options parameter cannot be read at the call site:
+// `request(`/release_notes/${id}`, options)` says nothing about the verb until you
+// know what `options` holds. Two of dailywerk's three unjoined sites were exactly
+// this, and both are GET.
+//
+// The proof is over the arguments callers actually pass, never over the default
+// alone. A default no caller falls back to is unreachable and proves nothing, while
+// an argument some caller passes is evidence about a request that really happens. So
+// every direct call to the wrapper inside the scanned roots contributes its argument,
+// or the default where it omits one, and all of them must agree on a single verb.
+// No call at all proves nothing; a disagreement proves nothing; one unreadable
+// argument poisons the set. Each declines the site, which is why the fixture where
+// nothing calls `run(options: any)` still declines.
+//
+// Only a named function DECLARATION qualifies. An arrow bound to a const, an object
+// method or a class member can be re-bound or reached through a receiver, and then
+// "every call" stops being a set this can enumerate.
+//
+// References that are NOT direct calls are ignored rather than fatal, and that is a
+// deliberate trade rather than an oversight. A wrapper passed as a value could in
+// principle be invoked with anything, so a stricter rule would decline. Ignoring such
+// a reference can only cost an edge — a verb reachable solely that way goes
+// unreported — and can never invent one, because every verb emitted came from an
+// argument at a call that is really written down. Rule 3 permits the first and not
+// the second. Test and spec files are excluded from both file sets upstream of this,
+// so a mock or an assertion that merely names a wrapper never reaches here at all.
+function forwarded(node, checker, scope) {
+  if (!scope) return null;
+  const declarations = unalias(checker.getSymbolAtLocation(node), checker)?.declarations;
+  if (declarations?.length !== 1) return null;
+  const parameter = declarations[0];
+  if (!ts.isParameter(parameter) || !ts.isFunctionDeclaration(parameter.parent) || !parameter.parent.name) return null;
+  const wrapper = parameter.parent, index = wrapper.parameters.indexOf(parameter);
+  const symbol = checker.getSymbolAtLocation(wrapper.name);
+  if (!symbol || index < 0) return null;
+  const found = new Set();
+  for (const file of scope.files) {
+    const source = scope.program.getSourceFile(`/repo/${file}`);
+    if (!source) continue;
+    const visit = child => {
+      if (ts.isCallExpression(child) && ts.isIdentifier(child.expression)
+        && unalias(checker.getSymbolAtLocation(child.expression), checker) === symbol) {
+        found.add(verb(child.arguments[index] ?? parameter.initializer));
+      }
+      if (found.size <= 8) ts.forEachChild(child, visit);
+    };
+    visit(source);
+  }
+  return found.size === 1 && !found.has(null) ? [...found][0] : null;
+}
+
+function method(node, checker, scope) {
+  if (!node) return 'GET';
+  if (!ts.isIdentifier(node)) return verb(node);
+  const initializer = constant(node, checker);
+  return initializer ? verb(initializer) : forwarded(node, checker, scope);
 }
 
 const underscoreOwner = owner => owner.replace(/([A-Z\d]+)([A-Z][a-z])/g, '$1_$2')
@@ -240,7 +325,7 @@ function callableAt(ctx, file, line) {
 }
 
 export function scanSeam(ctx) {
-  const config = configuration(ctx), { program, checker, roots } = sourceProgram(ctx, config);
+  const config = configuration(ctx), { program, checker, roots, callers } = sourceProgram(ctx, config);
   const model=rubyModel(ctx, { roots: config.sourceRoots });
   const clientSource = program.getSourceFile(`/repo/${config.client.module}`);
   const clientModule = clientSource && checker.getSymbolAtLocation(clientSource);
@@ -258,7 +343,7 @@ export function scanSeam(ctx) {
           const paths = possible && possible.every(value => value.startsWith('/') && !value.startsWith('//'))
             ? distinct(possible.map(value => patternKey(config.client.base.replace(/\/$/, '') + value))) : null;
           sites.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
-            rawPath: node.arguments[0]?.getText(source) ?? '', verb: method(node.arguments[1], checker), paths });
+            rawPath: node.arguments[0]?.getText(source) ?? '', verb: method(node.arguments[1], checker, { program, files: [...roots, ...callers] }), paths });
         }
       }
       ts.forEachChild(node, visit);
