@@ -32,7 +32,7 @@ import {
   viewRootFor,
   DEFAULT_LAYOUT,
 } from "./rails-views.js";
-import { isAutoloadHome, type ZeitwerkMap } from "./zeitwerk.js";
+import { camelize, isAutoloadHome, type ZeitwerkMap } from "./zeitwerk.js";
 
 const IMPORT_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 /** C/C++ source + header extensions, for resolving `#include` targets. */
@@ -1564,6 +1564,81 @@ function rubyFqnOf(id: string): string | null {
 }
 
 /**
+ * Constants the repository cannot own, because something outside it already does.
+ *
+ * Ruby lets any file reopen any constant, and extraction cannot tell `class String`
+ * adding one method from `class Workspace` defining a model — both mint a node. When
+ * the real constant lives outside the repository that reopening becomes the ONLY node
+ * with the name, and `pickRubyConstant`'s single-candidate branch below then hands it
+ * to every reference to the real thing.
+ *
+ * Measured on dailywerk at `3fabcfa1`: `config/initializers/string_truncate_bytes.rb`
+ * reopened `String` to add `truncate_bytes` and collected **76 references from 56
+ * files**, every sampled one an `is_a?(String)` type check — while the four files that
+ * actually call `.truncate_bytes` got nothing at all, because a method call on a
+ * receiver is not a constant reference. The dependency was reported exactly backwards:
+ * ask what depends on that initializer and every answer was wrong and every right
+ * answer was missing. `test/test_helper.rb` reopened `ActiveSupport` to reach
+ * `ActiveSupport::TestCase` and collected three more, all from production initializers
+ * calling `ActiveSupport.on_load` — production code reported as depending on the test
+ * helper, which is exactly how the TypeScript half of this defect announced itself.
+ *
+ * **These are lists of facts, and that is deliberate.** A repository cannot define
+ * Ruby's `String`, and a Rails application does not define `ActiveSupport`. Inferring
+ * it from file paths instead was measured first and was worse: "the file is neither
+ * the autoload home nor named for the constant" removed 96 edges rather than 79, and
+ * 17 of the extra were correct — `db/seeds/support.rb` really does define
+ * `StructuredSeeds`, and no path rule can know that. A list that is short, closed and
+ * checkable beats a rule that is general and wrong.
+ */
+const RUBY_CORE_CONSTANTS: ReadonlySet<string> = new Set([
+  "BasicObject", "Object", "Module", "Class", "Kernel", "Comparable", "Enumerable",
+  "NilClass", "TrueClass", "FalseClass", "Numeric", "Integer", "Float", "Rational",
+  "Complex", "String", "Symbol", "Array", "Hash", "Range", "Struct", "Data", "Set",
+  "Proc", "Method", "UnboundMethod", "Binding", "Enumerator", "Encoding",
+  "Exception", "StandardError", "RuntimeError", "ArgumentError", "TypeError",
+  "NameError", "NoMethodError", "IndexError", "KeyError", "StopIteration",
+  "FrozenError", "IOError", "EOFError", "SystemExit", "Interrupt", "SignalException",
+  "Regexp", "MatchData", "Time", "File", "IO", "Dir", "Thread", "Fiber", "Mutex",
+  "Queue", "ObjectSpace", "GC", "Math", "Process", "Signal", "Marshal", "Random",
+]);
+
+/** Gated on Rails detection, like everything else that assumes a framework. */
+const RAILS_FRAMEWORK_CONSTANTS: ReadonlySet<string> = new Set([
+  "Rails", "ActiveSupport", "ActiveRecord", "ActiveModel", "ActiveJob",
+  "ActiveStorage", "ActionController", "ActionView", "ActionMailer", "ActionMailbox",
+  "ActionCable", "ActionDispatch", "ActionText", "ActionPack", "Minitest", "Rack",
+  "Mime", "Arel",
+]);
+
+/**
+ * Is this lone node a REOPENING of a constant the repository does not own?
+ *
+ * Two exemptions, both for the case where a repository really does define a top-level
+ * constant of that name and is entitled to. Zeitwerk's autoload map is the authority
+ * in a Rails app: `app/models/set.rb` declaring `Set` is that application's `Set`,
+ * shadowing the stdlib deliberately, and Ruby agrees. Outside Rails there is no
+ * autoloader to ask, so the file naming convention every Ruby project follows stands
+ * in — `lib/set.rb` is allowed to be about `Set`, and
+ * `config/initializers/string_truncate_bytes.rb` is not about `String`.
+ *
+ * Only the single-candidate branch consults this. Two files reopening one foreign
+ * constant already reach the ambiguity path below and decline for their own reason.
+ */
+function reopensForeignConstant(
+  fqn: string,
+  node: NodeV1,
+  zeitwerk: ZeitwerkMap | null,
+): boolean {
+  if (fqn.includes("::")) return false;
+  if (!RUBY_CORE_CONSTANTS.has(fqn) && !(zeitwerk && RAILS_FRAMEWORK_CONSTANTS.has(fqn)))
+    return false;
+  if (zeitwerk && isAutoloadHome(zeitwerk, node.path, fqn)) return false;
+  const base = node.path.replace(/\.rb$/, "").split("/").pop() ?? "";
+  return camelize(base, zeitwerk?.acronyms ?? new Map()).toLowerCase() !== fqn.toLowerCase();
+}
+
+/**
  * Choose among the nodes defining one fully-qualified constant.
  *
  * Returns `"ambiguous"` rather than a guess when several files define it and
@@ -1581,6 +1656,15 @@ function pickRubyConstant(
   if (!candidates || candidates.length === 0) return null;
   if (candidates.length === 1) {
     const c = candidates[0];
+    // A file that reopens a foreign constant is not that constant's definition, and one
+    // node is exactly the case that used to sail through here unchallenged. Scoped to
+    // `want === "node"`, which is the mode that puts an EDGE on the answer; the
+    // FQN-keyed lookups are asking whether a constant PATH exists so a receiver can be
+    // typed, and `String#truncate_bytes` is still a real method on a real receiver.
+    // Same-file references are kept and stay `extracted` — there the source genuinely
+    // is talking about this declaration.
+    if (want === "node" && c.path !== file && reopensForeignConstant(fqn, c, zeitwerk))
+      return null;
     return { id: c.id, confidence: c.path === file ? "extracted" : "inferred" };
   }
   // Several nodes in THIS file are one reopened constant, not a choice — unlike
