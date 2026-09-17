@@ -157,15 +157,21 @@ for (const file of FILES) {
     }
   });
 
-  test(`${file}: a local type produces no edge`, async () => {
+  // Was a decline when T1 landed, and is deliberately inverted by T4. T1 had no way
+  // to resolve a name that reaches the walk without an import, so emitting an edge
+  // here would have been a guess; T4 resolves it against this file's own unique
+  // declaration, which is evidence rather than a guess. The decline it was guarding —
+  // a name this file neither imports nor declares — is still a decline, and now has
+  // its own test in graph-ts-same-file-type-references.test.ts.
+  test(`${file}: a type declared in this file references its local declaration`, async () => {
     const dir = makeFixture();
     try {
       await buildGraph(dir);
       const graph = graphOf(dir);
       assert.deepEqual(
         refsFrom(graph, `${file}#t4Local`).map((e) => e.target),
-        [],
-        "LocalOnly is declared in this file and imported from nowhere",
+        [`${file}#LocalOnly`],
+        "LocalOnly is declared in this file, uniquely — T4 binds it",
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
