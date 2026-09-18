@@ -78,6 +78,14 @@ const AUTOLOAD_LIB = /config\.autoload_lib(?:_once)?\s*(?:\(([^)]*)\))?/g;
  * The call spans lines and nests parentheses, so it is scanned, not matched.
  */
 const PUSH_DIR = /Rails\.autoloaders\.(?:main|once)\.push_dir\s*\(/g;
+
+/** `config.autoload_paths -= [path]`, and the guides' other spelling of a removal. */
+const AUTOLOAD_REMOVE = /config\.(?:eager_load_paths|autoload_paths|autoload_once_paths)\s*-=\s*(.+)/g;
+const AUTOLOAD_DELETE = /(?:config|ActiveSupport::Dependencies)\.(?:eager_load_paths|autoload_paths|autoload_once_paths)\.delete\s*\(/g;
+
+/** One path-bearing piece of an expression: a `.join(...)`, a string, or a local. */
+const PATH_EXPR = /(?:Rails\.|config\.)?root\.join\s*\(([^)]*)\)|(['"])([^'"]*)\2|\b([a-z_]\w*)\b/g;
+const PATH_LOCAL = /^[ \t]*([a-z_]\w*)[ \t]*=[ \t]*([^\n]+)$/gm;
 const NAMESPACE_ARG = /\bnamespace:\s*((?:::)?[A-Z]\w*(?:::[A-Z]\w*)*)/;
 
 /** `%w[a b]`, `%w(a b)`, `%w{a b}` — the list spelling `ignore:` almost always takes. */
@@ -186,22 +194,12 @@ function discoverRoots(root: string, rels: string[]): { roots: string[]; ignored
     if (segs.length === 3 && segs[2] === "concerns" && !APP_EXCLUDED.has(segs[1])) out.add(dir);
   }
 
-  const app = read(posix.join(root, "config/application.rb")) ?? "";
-  for (const line of app.matchAll(AUTOLOAD_LINE)) {
-    for (const frag of line[1].matchAll(PATH_FRAGMENT)) {
-      // `#{config.root}/lib` and `#{Rails.root}/lib` both reduce to `lib`; an
-      // absolute or parent-escaping path is not something this can place in the
-      // repo, so it is dropped rather than normalized into a wrong root.
-      const cleaned = frag[1].replace(/#\{[^}]*\}/g, "").replace(/^\/+/, "").replace(/\/+$/, "");
-      if (cleaned === "" || cleaned.startsWith("..")) continue;
-      if (dirs.has(cleaned)) out.add(cleaned);
-    }
-    // `Rails.root.join("lib")` has no quotes around the whole path but does around
-    // each segment, so the loop above already collected them individually; a
-    // multi-segment join (`join("lib", "ext")`) is rare enough that treating the
-    // segments as separate candidates — each checked against real directories —
-    // is safer than assembling a path that may not exist.
-  }
+  const app = configSource(read(posix.join(root, "config/application.rb")) ?? "");
+  const appLocals = pathLocals(app);
+  const existing = (dir: string | null): dir is string => dir !== null && dirs.has(dir);
+
+  for (const line of app.matchAll(AUTOLOAD_LINE))
+    for (const dir of pathExprs(line[1], appLocals)) if (existing(dir)) out.add(dir);
 
   const ignored = new Set<string>();
   for (const call of app.matchAll(AUTOLOAD_LIB)) {
@@ -210,20 +208,98 @@ function discoverRoots(root: string, rels: string[]): { roots: string[]; ignored
     for (const dir of ignoredDirs(call[1] ?? "")) ignored.add(`lib/${dir}`);
   }
 
+  // Removals, before any `push_dir`: the Rails guides' recipe for a namespaced
+  // directory is to take it OUT of the autoload paths and hand it back to Zeitwerk
+  // under a namespace. Read only the second half and the directory is both a plain
+  // root and a namespaced one; read neither and every file in it is mapped to a
+  // constant one namespace too short. A removed directory nobody re-adds is not
+  // autoloaded at all, so it stops being anyone's home.
+  for (const m of app.matchAll(AUTOLOAD_REMOVE))
+    for (const dir of pathExprs(m[1], appLocals)) if (dir) out.delete(dir);
+  for (const m of app.matchAll(AUTOLOAD_DELETE)) {
+    const args = balancedArgs(app, m.index! + m[0].length);
+    for (const dir of args === null ? [] : pathExprs(args, appLocals)) if (dir) out.delete(dir);
+  }
+
+  // `push_dir` belongs in an initializer — that is where the guides put it, next to
+  // the `module Services; end` it needs — so config/initializers is read as well as
+  // application.rb. Each file's locals are its own.
   const namespaces = new Map<string, string>();
-  for (const call of app.matchAll(PUSH_DIR)) {
-    const args = balancedArgs(app, call.index! + call[0].length);
-    if (args === null) continue;
-    const path = PATH_FRAGMENT.exec(args);
-    PATH_FRAGMENT.lastIndex = 0;
-    if (!path) continue;
-    const dir = path[1].replace(/#\{[^}]*\}/g, "").replace(/^\/+/, "").replace(/\/+$/, "");
-    if (dir === "" || dir.startsWith("..") || !dirs.has(dir)) continue;
-    out.add(dir);
-    const ns = NAMESPACE_ARG.exec(args);
-    if (ns) namespaces.set(dir, ns[1].replace(/^::/, ""));
+  const pushSources = ["config/application.rb", ...rels.filter((r) => r.startsWith("config/initializers/") && r.endsWith(".rb")).sort()];
+  for (const rel of pushSources) {
+    const text = rel === "config/application.rb" ? app : configSource(read(posix.join(root, rel)) ?? "");
+    if (!text.includes("push_dir")) continue;
+    const locals = rel === "config/application.rb" ? appLocals : pathLocals(text);
+    for (const call of text.matchAll(PUSH_DIR)) {
+      const args = balancedArgs(text, call.index! + call[0].length);
+      if (args === null) continue;
+      const dir = pathExprs(firstArg(args), locals)[0] ?? null;
+      if (!existing(dir)) continue;
+      out.add(dir);
+      const ns = NAMESPACE_ARG.exec(args);
+      if (ns) namespaces.set(dir, ns[1].replace(/^::/, ""));
+    }
   }
   return { roots: [...out], ignored: [...ignored], namespaces };
+}
+
+/**
+ * Configuration text with its full-line comments removed. `application.rb` files
+ * keep old settings commented out rather than deleted, and a reader that matched
+ * `# config.autoload_paths << Rails.root.join('app', 'components')` made `app`
+ * itself a root.
+ */
+function configSource(text: string): string {
+  return text.split("\n").map((line) => (line.trimStart().startsWith("#") ? "" : line)).join("\n");
+}
+
+/**
+ * The repository-relative directories a Ruby path expression names, in order, with
+ * `null` for a piece this cannot place. Understood: a string literal (`"lib"`,
+ * `"#{Rails.root}/lib"`), `Rails.root.join("a", "b")` / `root.join(...)` /
+ * `config.root.join(...)` with its segments JOINED — an earlier reader took each
+ * segment as a separate candidate, so `join('app', 'components')` proposed `app` —
+ * an optional `.to_s`, and a local bound to one of those earlier in the same file.
+ * Anything computed is invisible and meant to be: a wrong root maps a whole tree
+ * to the wrong constants.
+ */
+function pathExprs(expr: string, locals: ReadonlyMap<string, string>): (string | null)[] {
+  const out: (string | null)[] = [];
+  for (const m of expr.matchAll(PATH_EXPR)) {
+    if (m[1] !== undefined) {
+      const segs = [...m[1].matchAll(PATH_FRAGMENT)].map((f) => f[1]);
+      out.push(segs.length ? cleanPath(segs.join("/")) : null);
+    } else if (m[3] !== undefined) out.push(cleanPath(m[3]));
+    else if (m[4] !== undefined && locals.has(m[4])) out.push(locals.get(m[4])!);
+  }
+  return out;
+}
+
+/** `name = Rails.root.join("app/x")` and friends, read in document order. */
+function pathLocals(text: string): Map<string, string> {
+  const locals = new Map<string, string>();
+  for (const m of text.matchAll(PATH_LOCAL)) {
+    const dir = pathExprs(m[2], new Map())[0];
+    if (dir) locals.set(m[1], dir);
+  }
+  return locals;
+}
+
+function cleanPath(raw: string): string | null {
+  const cleaned = raw.replace(/#\{[^}]*\}/g, "").replace(/^\/+/, "").replace(/\/+$/, "").replace(/\/{2,}/g, "/");
+  return cleaned === "" || cleaned.startsWith("..") ? null : cleaned;
+}
+
+/** The first argument of an argument list, up to the first top-level comma. */
+function firstArg(args: string): string {
+  let depth = 0;
+  for (let i = 0; i < args.length; i++) {
+    const c = args[i];
+    if (c === "(" || c === "[") depth++;
+    else if (c === ")" || c === "]") depth--;
+    else if (c === "," && depth === 0) return args.slice(0, i);
+  }
+  return args;
 }
 
 /** The argument text of a call whose `(` ends just before `start`, or null when the

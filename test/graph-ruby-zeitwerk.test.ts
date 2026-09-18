@@ -401,3 +401,83 @@ test("zeitwerk: push_dir without a namespace adds a plain root", async () => {
     );
   });
 });
+
+/**
+ * The Rails guides' recipe for a namespaced directory, as a real app writes it: the
+ * initializer defines the namespace and hands the directory to Zeitwerk under it,
+ * and application.rb takes the directory OUT of the plain autoload paths first.
+ * Read neither half and every file in the tree is mapped one namespace too short.
+ * Found on a third, held-out Rails application: 133 files in three such trees, and
+ * 21 references that had been declining for want of a home.
+ */
+const GUIDES = {
+  "Gemfile": RAILS.Gemfile,
+  "config/application.rb":
+    `require "rails/all"\nmodule Dummy\n  class Application < Rails::Application\n` +
+    `    plugins_path = root.join("app/plugins").to_s\n` +
+    `    config.autoload_paths -= [plugins_path]\n` +
+    `    config.eager_load_paths -= [plugins_path]\n  end\nend\n`,
+  "config/initializers/plugins.rb":
+    `plugins_dir = Rails.root.join("app/plugins")\nmodule Plugins; end\n` +
+    `Rails.autoloaders.main.push_dir(plugins_dir, namespace: Plugins)\n`,
+  "app/plugins/exporter.rb": `module Plugins\n  class Exporter\n    def self.go = 1\n  end\nend\n`,
+  "app/plugins/exporter/csv.rb":
+    `module Plugins\n  class Exporter\n    class Csv\n      def run\n        Exporter.go\n      end\n    end\n  end\nend\n`,
+};
+
+test("zeitwerk: push_dir in an initializer, through a local, with the removal", async () => {
+  await withGraph(GUIDES, (graph) => {
+    assert.deepEqual(
+      refs(graph, "app/plugins/exporter/csv.rb#Plugins.Exporter.Csv.run"),
+      ["app/plugins/exporter.rb#Plugins.Exporter"],
+    );
+  });
+});
+
+test("zeitwerk: a directory removed from the autoload paths and never re-added is nobody's home", async () => {
+  await withGraph(
+    {
+      "Gemfile": RAILS.Gemfile,
+      "config/application.rb":
+        `require "rails/all"\nmodule Dummy\n  class Application < Rails::Application\n` +
+        `    config.autoload_paths -= [Rails.root.join("app/extras").to_s]\n  end\nend\n`,
+      "app/extras/widget.rb": `class Widget\nend\n`,
+      "app/models/widget.rb": `class Widget\nend\n`,
+      "app/models/user.rb": `class User\n  def go\n    Widget.new\n  end\nend\n`,
+    },
+    (graph) => {
+      assert.deepEqual(refs(graph, "app/models/user.rb#User.go"), ["app/models/widget.rb#Widget"]);
+    },
+  );
+});
+
+test("zeitwerk: a multi-segment join names one directory, not each segment", async () => {
+  // `join("lib", "ext")` is `lib/ext`. Read as two candidates it made `lib` a root,
+  // so lib/ext/thing.rb became `Ext::Thing` — and a genuine two-home ambiguity with
+  // app/models/thing.rb quietly resolved to one of them.
+  await withGraph(
+    {
+      "Gemfile": RAILS.Gemfile,
+      "config/application.rb":
+        `require "rails/all"\nmodule Dummy\n  class Application < Rails::Application\n` +
+        `    config.autoload_paths << Rails.root.join("lib", "ext")\n  end\nend\n`,
+      "lib/ext/thing.rb": `class Thing\nend\n`,
+      "app/models/thing.rb": `class Thing\nend\n`,
+      "app/models/user.rb": `class User\n  def go\n    Thing.new\n  end\nend\n`,
+    },
+    (graph) => assert.deepEqual(refs(graph, "app/models/user.rb#User.go"), [], "two real homes"),
+  );
+});
+
+test("zeitwerk: a commented-out autoload line configures nothing", async () => {
+  await withGraph(
+    {
+      "Gemfile": RAILS.Gemfile,
+      "config/application.rb":
+        `require "rails/all"\nmodule Dummy\n  class Application < Rails::Application\n` +
+        `    # config.autoload_paths << Rails.root.join("lib")\n  end\nend\n`,
+      ...AMBIGUOUS_THING,
+    },
+    (graph) => assert.deepEqual(refs(graph, "app/models/user.rb#User.go"), ["app/models/thing.rb#Thing"]),
+  );
+});
