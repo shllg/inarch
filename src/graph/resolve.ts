@@ -256,6 +256,37 @@ export function resolveEdges(
     }
   }
 
+  /**
+   * The class or module whose body declares the value constant `ref` names, or null.
+   *
+   * The head resolves like any constant; the terminal is then looked up through the
+   * head's ancestry, as Ruby does for `Child::LIMIT` declared on `Parent`. Only a
+   * declaration written directly in a class or module body counts, and only one:
+   * two bodies declaring the same path is a choice, and a declaration whose source
+   * is not the owning scope — `Foo::BAR = 1` at a file's top level — has no class
+   * node that honestly owns it.
+   */
+  const rubyValueConstantOwner = (ref: string, e: RawEdge): { id: string; confidence: EdgeV1["confidence"] } | null => {
+    const cut = ref.lastIndexOf("::");
+    if (cut <= 0) return null;
+    const head = constNode(resolveRubyConstant(ref.slice(0, cut), e.nesting ?? [], e.file, rubyFqn, rubyHeritage, rubyShadow, zeitwerk, true, "fqn"));
+    const headFqn = head ? rubyFqnOf(head.id) : null;
+    if (!headFqn) return null;
+    const walk = rubyLinearize(headFqn, rubyHeritage);
+    if (walk.truncated) return null;
+    const tail = ref.slice(cut + 2);
+    for (const scope of walk.chain) {
+      const decls = rubyConstAssignments.get(`${scope}::${tail}`);
+      if (!decls?.length) continue;
+      const sources = [...new Set(decls.map((d) => d.source))];
+      if (sources.length !== 1) return null;
+      const node = byId.get(sources[0]);
+      if (!node || rubyFqnOf(node.id) !== scope) return null;
+      return { id: node.id, confidence: node.path === e.file ? "extracted" : "inferred" };
+    }
+    return null;
+  };
+
   // Ruby ancestors, FQN-keyed, for step 2 of the constant lookup. Built from the
   // heritage edges themselves in a pre-pass, because the answer is needed BEFORE
   // the main loop resolves them — a constant may only be visible through the very
@@ -1163,7 +1194,18 @@ export function resolveEdges(
         const constRef = e.rubyAssocThrough ? rubyThroughTarget(e) : e.name;
         if (constRef === null) continue;
         const hit = constNode(resolveRubyConstant(constRef, e.nesting, e.file, rubyFqn, rubyHeritage, rubyShadow, zeitwerk, true));
-        if (!hit) continue;
+        if (!hit) {
+          // `Session::INTERNAL_GATEWAY` names a VALUE, and a value is not a node, so
+          // the whole path resolved to nothing and the class that declares it — the
+          // one thing this line depends on — went with it. One reference, to the
+          // declaring class, is the honest answer; the head-plus-terminal rule above
+          // exists to stop a second answer being bolted onto a right one, and here
+          // there is no first answer to bolt it onto.
+          const owner = e.rubyAssocThrough ? null : rubyValueConstantOwner(constRef, e);
+          if (owner && owner.id !== e.source)
+            add(e.source, owner.id, "references", owner.confidence, `value constant ${constRef.replace(/^::/, "")}`);
+          continue;
+        }
         if (hit.id !== e.source) add(e.source, hit.id, "references", hit.confidence);
         // An association declared inside an `included do` is also each INCLUDER's —
         // `belongs_to :user` in `Owned` gives `Post` that association. Callbacks
