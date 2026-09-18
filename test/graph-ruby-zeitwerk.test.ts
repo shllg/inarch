@@ -359,3 +359,45 @@ test("zeitwerk: autoload_lib makes two homes genuinely ambiguous again", async (
     },
   );
 });
+
+/**
+ * `Rails.autoloaders.main.push_dir(Rails.root.join("app/packs"), namespace: Packs)`.
+ * The directory is already a root by the `app/<subdir>` rule, so without the
+ * namespace the map computed `Core::Pack` for a file that defines
+ * `Packs::Core::Pack` — and no file in the tree was ever anyone's home. dailywerk
+ * has two of these; nothing there is contested yet, so this pins the mechanism on
+ * the defect-10 shape where it decides the answer.
+ */
+const PACKS = (call: string) => ({
+  "Gemfile": RAILS.Gemfile,
+  "config/application.rb":
+    `require "rails/all"\nmodule Dummy\n  class Application < Rails::Application\n` +
+    `    ${call}\n  end\nend\n`,
+  "app/packs/core/pack.rb": `module Packs\n  module Core\n    class Pack\n      def self.go = 1\n    end\n  end\nend\n`,
+  "app/packs/core/pack/extra.rb":
+    `module Packs\n  module Core\n    class Pack\n      class Extra\n        def run\n          Pack.go\n        end\n      end\n    end\n  end\nend\n`,
+});
+
+test("zeitwerk: push_dir with a namespace prefixes every constant under it", async () => {
+  await withGraph(
+    PACKS(`Rails.autoloaders.main.push_dir(\n      Rails.root.join("app/packs"),\n      namespace: Packs\n    )`),
+    (graph) => {
+      assert.deepEqual(
+        refs(graph, "app/packs/core/pack/extra.rb#Packs.Core.Pack.Extra.run"),
+        ["app/packs/core/pack.rb#Packs.Core.Pack"],
+        "the namespaced home outranks the wrapper beside the reference",
+      );
+    },
+  );
+});
+
+test("zeitwerk: push_dir without a namespace adds a plain root", async () => {
+  // Guard: the same tree with no `namespace:` is `Core::Pack`, which is not the
+  // constant these files define — so nothing is a home and same-file still wins.
+  await withGraph(PACKS(`Rails.autoloaders.main.push_dir(Rails.root.join("app/packs"))`), (graph) => {
+    assert.deepEqual(
+      refs(graph, "app/packs/core/pack/extra.rb#Packs.Core.Pack.Extra.run"),
+      ["app/packs/core/pack/extra.rb#Packs.Core.Pack"],
+    );
+  });
+});

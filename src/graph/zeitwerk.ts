@@ -70,6 +70,16 @@ const PATH_FRAGMENT = /['"]([^'"]+)['"]/g;
  */
 const AUTOLOAD_LIB = /config\.autoload_lib(?:_once)?\s*(?:\(([^)]*)\))?/g;
 
+/**
+ * `Rails.autoloaders.main.push_dir(Rails.root.join("app/capability_packs"), namespace:
+ * CapabilityPacks)` — a root whose constants live UNDER a namespace. dailywerk has
+ * two. Without the namespace the map computed `Core::Pack` for a file that defines
+ * `CapabilityPacks::Core::Pack`, so no file in either tree was ever anyone's home.
+ * The call spans lines and nests parentheses, so it is scanned, not matched.
+ */
+const PUSH_DIR = /Rails\.autoloaders\.(?:main|once)\.push_dir\s*\(/g;
+const NAMESPACE_ARG = /\bnamespace:\s*((?:::)?[A-Z]\w*(?:::[A-Z]\w*)*)/;
+
 /** `%w[a b]`, `%w(a b)`, `%w{a b}` — the list spelling `ignore:` almost always takes. */
 const WORD_ARRAY = /%[wi][[({]([^\])}]*)[\])}]/;
 
@@ -107,7 +117,7 @@ export function discoverZeitwerk(root: string, repoFiles: string[]): ZeitwerkMap
   if (!GEMFILE_RAILS.test(read(posix.join(root, gemfile)) ?? "")) return null;
 
   const acronyms = readAcronyms(root, relSet);
-  const { roots, ignored } = discoverRoots(root, rels);
+  const { roots, ignored, namespaces } = discoverRoots(root, rels);
 
   const fqnByPath = new Map<string, string>();
   for (const rel of rels) {
@@ -122,7 +132,9 @@ export function discoverZeitwerk(root: string, repoFiles: string[]): ZeitwerkMap
     if (owner === undefined) continue;
     const inner = rel.slice(owner.length + 1, -".rb".length);
     if (inner === "") continue;
-    fqnByPath.set(rel, inner.split("/").map((seg) => camelize(seg, acronyms)).join("::"));
+    const path = inner.split("/").map((seg) => camelize(seg, acronyms)).join("::");
+    const ns = namespaces.get(owner);
+    fqnByPath.set(rel, ns ? `${ns}::${path}` : path);
   }
   return { fqnByPath, roots, acronyms };
 }
@@ -156,7 +168,7 @@ function read(abs: string): string | null {
  * actually exist in the walked file list become roots, so a configured-but-absent
  * path contributes nothing.
  */
-function discoverRoots(root: string, rels: string[]): { roots: string[]; ignored: string[] } {
+function discoverRoots(root: string, rels: string[]): { roots: string[]; ignored: string[]; namespaces: Map<string, string> } {
   const dirs = new Set<string>();
   for (const rel of rels) {
     let dir = posix.dirname(rel);
@@ -197,7 +209,32 @@ function discoverRoots(root: string, rels: string[]): { roots: string[]; ignored
     out.add("lib");
     for (const dir of ignoredDirs(call[1] ?? "")) ignored.add(`lib/${dir}`);
   }
-  return { roots: [...out], ignored: [...ignored] };
+
+  const namespaces = new Map<string, string>();
+  for (const call of app.matchAll(PUSH_DIR)) {
+    const args = balancedArgs(app, call.index! + call[0].length);
+    if (args === null) continue;
+    const path = PATH_FRAGMENT.exec(args);
+    PATH_FRAGMENT.lastIndex = 0;
+    if (!path) continue;
+    const dir = path[1].replace(/#\{[^}]*\}/g, "").replace(/^\/+/, "").replace(/\/+$/, "");
+    if (dir === "" || dir.startsWith("..") || !dirs.has(dir)) continue;
+    out.add(dir);
+    const ns = NAMESPACE_ARG.exec(args);
+    if (ns) namespaces.set(dir, ns[1].replace(/^::/, ""));
+  }
+  return { roots: [...out], ignored: [...ignored], namespaces };
+}
+
+/** The argument text of a call whose `(` ends just before `start`, or null when the
+ * parentheses never balance — a truncated file is not a root to guess at. */
+function balancedArgs(text: string, start: number): string | null {
+  let depth = 1;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "(") depth++;
+    else if (text[i] === ")" && --depth === 0) return text.slice(start, i);
+  }
+  return null;
 }
 
 /**
