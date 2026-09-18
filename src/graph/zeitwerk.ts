@@ -36,6 +36,13 @@ export interface ZeitwerkMap {
    * Shared with the Rails macro extractor so `has_many :api_clients` infers
    * `APIClient` and not `ApiClient` — the spec's "one inflector, not two". */
   acronyms: ReadonlyMap<string, string>;
+  /** Top-level constants a locked gem provides, by the gem-naming convention:
+   * `pagy` → `Pagy`, `aws-record` → `Aws`, `i18n` → `I18n`, `good_job` → `GoodJob`.
+   * The repository cannot own these, so a file that reopens one is a patch, not a
+   * definition — the defect-9 rule, extended past the hand-written core and Rails
+   * lists. A name the convention gets wrong (`rspec-rails` is `RSpec`, not `Rspec`)
+   * is simply absent, which leaves resolution exactly as it was. */
+  gemConstants: ReadonlySet<string>;
 }
 
 /**
@@ -144,7 +151,7 @@ export function discoverZeitwerk(root: string, repoFiles: string[]): ZeitwerkMap
     const ns = namespaces.get(owner);
     fqnByPath.set(rel, ns ? `${ns}::${path}` : path);
   }
-  return { fqnByPath, roots, acronyms };
+  return { fqnByPath, roots, acronyms, gemConstants: readGemConstants(root, relSet, acronyms) };
 }
 
 /**
@@ -329,6 +336,18 @@ function ignoredDirs(args: string): string[] {
     if (cleaned === "" || cleaned.startsWith("..")) continue;
     out.push(cleaned);
   }
+  return out;
+}
+
+/** The first segment of every gem in the lockfile's specs, camelized. Only the
+ * four-space `name (version)` lines — the six-space ones below them are that gem's
+ * own dependencies, which are locked too and appear as specs of their own. */
+function readGemConstants(root: string, relSet: ReadonlySet<string>, acronyms: ReadonlyMap<string, string>): Set<string> {
+  const out = new Set<string>();
+  const lock = ["Gemfile.lock", "gems.locked"].find((f) => relSet.has(f));
+  if (!lock) return out;
+  for (const m of (read(posix.join(root, lock)) ?? "").matchAll(/^ {4}([A-Za-z0-9_.]+)(?:-[A-Za-z0-9_.-]+)? \(/gm))
+    out.add(camelize(m[1], acronyms));
   return out;
 }
 

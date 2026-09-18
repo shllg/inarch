@@ -222,3 +222,93 @@ test("framework names are only foreign where a framework is detected", async () 
     },
   );
 });
+
+// ------------------------------------------------ gem-owned constants, from the lockfile
+
+/**
+ * The closed lists name Ruby's core and Rails' own namespaces. A repository reopens
+ * gem constants too — an initializer patching `I18n`, `lib/patches/` patching `Aws`
+ * — and those collected every reference to the gem: 734 for one `I18n` initializer
+ * in a held-out application, and 58 on dailywerk, where `app/models/ruby_llm/
+ * model_record.rb` opens `module RubyLLM` only to nest a model while every source
+ * that names `RubyLLM` is calling the gem. The lockfile says which top-level
+ * constants gems provide, by the naming convention.
+ */
+const LOCKED = (gems: string) => `GEM\n  remote: https://rubygems.org/\n  specs:\n${gems}\nPLATFORMS\n  ruby\n`;
+
+test("a reopened gem constant is not the repository's definition", async () => {
+  await withGraph(
+    {
+      ...RAILS,
+      "Gemfile.lock": LOCKED(`    pagy (9.0)\n    rails (7.1.0)\n      activesupport (= 7.1.0)\n`),
+      "config/initializers/pagy_extra.rb": `module Pagy\n  EXTRA = 1\nend\n`,
+      "app/services/search.rb": `class Search\n  def go\n    Pagy.new(count: 1)\n  end\nend\n`,
+    },
+    (g) => assert.deepEqual(edgesTo(g, "config/initializers/pagy_extra.rb#Pagy").map((e) => e.source), []),
+  );
+});
+
+test("a hyphenated gem name owns its first segment", async () => {
+  await withGraph(
+    {
+      ...RAILS,
+      "Gemfile.lock": LOCKED(`    aws-record (2.15)\n`),
+      "lib/patches/aws_scan.rb": `module Aws\n  QUIET = true\nend\n`,
+      "app/services/store.rb": `class Store\n  def go\n    Aws.config\n  end\nend\n`,
+    },
+    (g) => assert.deepEqual(edgesTo(g, "lib/patches/aws_scan.rb#Aws").map((e) => e.source), []),
+  );
+});
+
+test("a subclass of a patched core class extends the external name, not the patch", async () => {
+  // The constant resolver declined, and the bare-name ladder then found the same
+  // reopening by unique name. What it extends is Ruby's Hash.
+  await withGraph(
+    {
+      ...RAILS,
+      "lib/patches/hash_ext.rb": `class Hash\n  def blank_leaves? = false\nend\n`,
+      "app/models/envelope.rb": `class Envelope < Hash\nend\n`,
+    },
+    (g) => {
+      const ext = g.edges.filter((e) => e.source === "app/models/envelope.rb#Envelope" && e.relation === "extends");
+      assert.deepEqual(ext.map((e) => e.target), ["Hash"]);
+    },
+  );
+});
+
+test("a gem-named constant the repository owns at its autoload home still resolves", async () => {
+  await withGraph(
+    {
+      ...RAILS,
+      "Gemfile.lock": LOCKED(`    widget (1.0)\n`),
+      "app/models/widget.rb": `class Widget\nend\n`,
+      "app/services/maker.rb": `class Maker\n  def go\n    Widget.new\n  end\nend\n`,
+    },
+    (g) => assert.deepEqual(edgesTo(g, "app/models/widget.rb#Widget").map((e) => e.source), ["app/services/maker.rb#Maker.go"]),
+  );
+});
+
+test("a locked gem's own dependency lines are read as the gems they are, nothing more", async () => {
+  // Six-space lines under a spec are that gem's dependencies; only the four-space
+  // spec lines name gems. `tenancy` appears only as a dependency here.
+  await withGraph(
+    {
+      ...RAILS,
+      "Gemfile.lock": LOCKED(`    rails (7.1.0)\n      tenancy (>= 1)\n`),
+      "config/initializers/tenancy.rb": `module Tenancy\n  def self.on = true\nend\n`,
+      "app/services/maker.rb": `class Maker\n  def go\n    Tenancy.on\n  end\nend\n`,
+    },
+    (g) => assert.deepEqual(edgesTo(g, "config/initializers/tenancy.rb#Tenancy").map((e) => e.source), ["app/services/maker.rb#Maker.go"]),
+  );
+});
+
+test("without a lockfile a reopened gem constant resolves as it always did", async () => {
+  await withGraph(
+    {
+      ...RAILS,
+      "config/initializers/pagy_extra.rb": `module Pagy\n  EXTRA = 1\nend\n`,
+      "app/services/search.rb": `class Search\n  def go\n    Pagy.new(count: 1)\n  end\nend\n`,
+    },
+    (g) => assert.deepEqual(edgesTo(g, "config/initializers/pagy_extra.rb#Pagy").map((e) => e.source), ["app/services/search.rb#Search.go"]),
+  );
+});

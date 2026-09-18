@@ -1176,7 +1176,16 @@ export function resolveEdges(
       // measured: `include Actual` inside a `Scope` that assigns its own `Actual`
       // acquired an `extends` edge to the unrelated top-level module. Emit nothing.
       if (constHit === "stopped") continue;
-      const hit = constHit ?? resolveName(e.name!, e.file, kinds, perFileName, globalName);
+      let hit = constHit ?? resolveName(e.name!, e.file, kinds, perFileName, globalName);
+      // The constant resolver declines a reopened foreign constant (docs/39), and the
+      // bare-name ladder above then found the same reopening again by unique name:
+      // `class WireEnvelope < Hash` extended a `class Hash` patch in lib/patches.
+      // What it extends is Ruby's Hash, which is external — so keep the bare name,
+      // exactly as `class Error < StandardError` does.
+      if (hit && !constHit && e.nesting && !e.name!.includes("::")) {
+        const n = byId.get(hit.id);
+        if (n && n.path !== e.file && reopensForeignConstant(e.name!, n, zeitwerk)) hit = null;
+      }
       // an unresolved base is usually an external/imported type — keep the name.
       add(e.source, hit?.id ?? e.name!, e.relation, hit?.confidence ?? "inferred");
     } else if (e.relation === "references" && e.name) {
@@ -1689,7 +1698,7 @@ function reopensForeignConstant(
   zeitwerk: ZeitwerkMap | null,
 ): boolean {
   if (fqn.includes("::")) return false;
-  if (!RUBY_CORE_CONSTANTS.has(fqn) && !(zeitwerk && RAILS_FRAMEWORK_CONSTANTS.has(fqn)))
+  if (!RUBY_CORE_CONSTANTS.has(fqn) && !(zeitwerk && (RAILS_FRAMEWORK_CONSTANTS.has(fqn) || zeitwerk.gemConstants.has(fqn))))
     return false;
   if (zeitwerk && isAutoloadHome(zeitwerk, node.path, fqn)) return false;
   const base = node.path.replace(/\.rb$/, "").split("/").pop() ?? "";
