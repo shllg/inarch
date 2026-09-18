@@ -587,7 +587,13 @@ export function resolveEdges(
   const rubyReturns = new Map<string, RubyType>();
   for (const e of rawEdges) {
     if (!e.rubyReturnsFor || !e.name || !e.nesting) continue;
-    const hit = constNode(resolveRubyConstant(e.name, e.nesting, e.file, rubyFqn, rubyHeritage, rubyShadow, zeitwerk, true));
+    // `"fqn"`, like the association registry below and the receiver typing it feeds:
+    // a return type is a CONSTANT PATH, never an edge. Asking for a node here let two
+    // declines meant for edges veto types that were never in doubt — a method
+    // returning `String` in a repository that patches `String` got no return type
+    // (the foreign-constant decline of docs/39), and one returning a constant reopened
+    // across several files with no autoload home got none either.
+    const hit = constNode(resolveRubyConstant(e.name, e.nesting, e.file, rubyFqn, rubyHeritage, rubyShadow, zeitwerk, true, "fqn"));
     const target = hit ? rubyFqnOf(hit.id) : null;
     if (!target) continue;
     // A return type inferred through ActiveRecord's finder vocabulary — `def latest;

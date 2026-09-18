@@ -16,6 +16,8 @@ import {
   rubyMethodReturnType,
   rubyCoreExprType,
   rubyCoreMethodReturn,
+  rubyYardCoreType,
+  rubyLeadingComments,
   rubyConstructorType,
   rubyConstructionHasBlock,
   rubyScopeKey,
@@ -1435,7 +1437,12 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
     // reader is hand-written, so no Rails macro states what it yields. A carrier,
     // never an edge; see `RawEdge.rubyTypeOnly`.
     if (ctx.lang === "ruby" && (desc.kind === "method" || desc.kind === "function")) {
-      const returns = rubyMethodReturnType(node, rubyTypeCtx(childCtx));
+      // The body first: code outranks a comment about it. The tag only speaks when the
+      // body settles nothing — `utf8(value).strip`, where the helper's own type is
+      // not visible from here.
+      const yard = rubyYardCoreType(node, "return");
+      const returns = rubyMethodReturnType(node, rubyTypeCtx(childCtx))
+        ?? (yard ? { fqn: yard, kind: "instance" as const } : null);
       if (returns) {
         edges.push({
           source: id,
@@ -3716,11 +3723,9 @@ function rubyArrayParameterEvidence(receiver: Parser.SyntaxNode, method: Parser.
   if (!parameter) return null;
   const value = parameter.childForFieldName("value");
   if (value && value.type !== "array") return null;
-  let nextRow = method.startPosition.row;
-  for (let comment = method.previousNamedSibling; comment?.type === "comment" && comment.endPosition.row + 1 >= nextRow; comment = comment.previousNamedSibling) {
+  for (const comment of rubyLeadingComments(method)) {
     const match = comment.text.match(/^#\s*@param\s+(\w+)\s+\[((?:::)?Array(?:<[^\]\n]+>)?)\](?:\s|$)/);
     if (match?.[1] === receiver.text) return `annotation-derived @param ${receiver.text} [${match[2]}] at ${ctx.rel}:${comment.startPosition.row + 1}`;
-    nextRow = comment.startPosition.row;
   }
   return null;
 }

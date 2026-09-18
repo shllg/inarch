@@ -621,6 +621,9 @@ const RUBY_LITERAL_TYPE: ReadonlyMap<string, string> = new Map([
   ["range", "Range"],
 ]);
 
+/** The classes a YARD tag may type a value as: the ones a literal can produce. */
+const RUBY_YARD_CORE: ReadonlySet<string> = new Set(RUBY_LITERAL_TYPE.values());
+
 /**
  * Defined on `Object`, so every receiver answers them, and String by contract. A
  * class that overrides `to_s` to return a non-String is broken in ways `puts` would
@@ -735,6 +738,61 @@ function rubyExprType(node: Parser.SyntaxNode, ctx: RubyTypeCtx, depth = 0): Rub
   if (!recv || recv.kind !== "instance") return null;
   const returns = RUBY_CORE_RETURNS.get(`${recv.fqn}#${method.text}`);
   return returns && !rubyConstructionHasBlock(node) ? { fqn: returns, kind: "instance" } : null;
+}
+
+/**
+ * The comment nodes directly above a `def`, nearest first.
+ *
+ * The first `def` in a class body is the case that needs care. tree-sitter-ruby
+ * hangs the comments above it on the CLASS, as siblings of the body — so the method
+ * itself has no previous sibling at all, and a reader that only walks siblings finds
+ * no documentation on exactly the method a class most often documents first. Both
+ * YARD readers go through here so they cannot disagree about which comments belong
+ * to which method.
+ */
+export function rubyLeadingComments(method: Parser.SyntaxNode): Parser.SyntaxNode[] {
+  let start = method.previousNamedSibling;
+  const body = method.parent;
+  if (!start && body?.type === "body_statement" && body.firstNamedChild?.startIndex === method.startIndex)
+    start = body.previousNamedSibling;
+  const out: Parser.SyntaxNode[] = [];
+  let nextRow = method.startPosition.row;
+  for (let c = start; c?.type === "comment" && c.endPosition.row + 1 >= nextRow; c = c.previousNamedSibling) {
+    out.push(c);
+    nextRow = c.startPosition.row;
+  }
+  return out;
+}
+
+/**
+ * The ONE core class a YARD tag above `method` states, or null.
+ *
+ * `@param bytes [String]` and `@return [String]` are the author saying what a value
+ * is, and dailywerk writes them on nearly every method. Two of its seven
+ * `truncate_bytes` call sites are reachable through nothing else: a parameter the
+ * body never assigns, and a normalizer whose body calls a sibling helper.
+ *
+ * Trusting a comment is a real choice, so it is bounded three ways. Only a CORE
+ * class counts — a receiver typed `String` can reach nothing but methods the
+ * repository itself defines on `String`, so a stale tag cannot invent an edge into
+ * application code. Only a single class, with `nil` allowed beside it: `[String,
+ * Symbol]` is a union this pass cannot choose from. And only when exactly one such
+ * tag names the value; two `@return` lines are two answers.
+ */
+export function rubyYardCoreType(method: Parser.SyntaxNode, tag: "param" | "return", name?: string): string | null {
+  const found: string[] = [];
+  for (const c of rubyLeadingComments(method)) {
+    const m = tag === "return"
+      ? c.text.match(/^#\s*@return\s+\[([^\]\n]+)\]/)
+      : c.text.match(/^#\s*@param\s+(\w+)\s+\[([^\]\n]+)\]/);
+    if (!m || (tag === "param" && m[1] !== name)) continue;
+    found.push(tag === "return" ? m[1] : m[2]);
+  }
+  if (found.length !== 1) return null;
+  const types = found[0].split(",").map((t) => t.trim().replace(/^::/, "")).filter((t) => t !== "nil" && t !== "NilClass");
+  if (types.length !== 1) return null;
+  const base = types[0].replace(/[<{].*$/s, "");
+  return RUBY_YARD_CORE.has(base) ? base : null;
 }
 
 /**
@@ -900,6 +958,13 @@ export function rubyMethodReturnType(
     }
     for (const c of n.namedChildren) visitReturns(c);
   };
+  // `def build = Widget.new` — an endless def's body field is the expression itself,
+  // not a body_statement, so the result-path walk below found no exit at all and 91
+  // such methods in dailywerk declared nothing. The expression IS the only exit.
+  if (body.type !== "body_statement") {
+    visitReturns(body);
+    return ok && consider(body) ? agreed : null;
+  }
   for (const c of body.namedChildren) visitReturns(c);
   if (!ok) return null;
   for (const path of rubyResultPaths(body)) if (!consider(path)) return null;
@@ -1024,7 +1089,21 @@ function handleRuby(node: Parser.SyntaxNode, ctx: RubyTypeCtx, bindings: FileBin
     const { name, target, value, assignment } = declaration;
     const key = rubyScopeKey(name, ctx.scope, ctx.classScope, ctx.selfKind);
     const at = name.startsWith("@") || name.startsWith("$") ? RUBY_ALWAYS_BOUND : node.startIndex;
-    const type = assignment && value && target.type !== "global_variable" ? rubyExprType(value, ctx) : null;
+    let type = assignment && value && target.type !== "global_variable" ? rubyExprType(value, ctx) : null;
+    // A method parameter the author typed. Splat, double-splat and block parameters
+    // are excluded by construction — their parent is the wrapper, not the list — since
+    // `*args` is an Array whatever its tag says about the elements.
+    if (!assignment && node.type === "method_parameters" &&
+        (node.parent?.type === "method" || node.parent?.type === "singleton_method") &&
+        ["method_parameters", "optional_parameter", "keyword_parameter"].includes(target.parent?.type ?? "")) {
+      const core = rubyYardCoreType(node.parent, "param", name);
+      // Not a collection. `@param tool_calls [Array<ToolCall>]` is already evidence
+      // for something narrower — what `self` is inside a block mapped over it — and
+      // that reading requires the parameter to stay untyped. Typing it Array cost
+      // exactly those 2 ruby_injection edges on dailywerk and bought nothing, since
+      // the repository patches no collection class.
+      if (core && core !== "Array" && core !== "Hash") type = { fqn: core, kind: "instance" };
+    }
     bindings.noteRubyVar(key, name, type, at);
   }
 }
