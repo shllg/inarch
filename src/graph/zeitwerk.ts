@@ -37,7 +37,7 @@ export interface ZeitwerkMap {
    * `APIClient` and not `ApiClient` — the spec's "one inflector, not two". */
   acronyms: ReadonlyMap<string, string>;
   /** Top-level constants a locked gem provides, by the gem-naming convention:
-   * `pagy` → `Pagy`, `aws-record` → `Aws`, `i18n` → `I18n`, `good_job` → `GoodJob`.
+   * `kaminari` → `Kaminari`, `aws-sdk-s3` → `Aws`, `i18n` → `I18n`, `good_job` → `GoodJob`.
    * The repository cannot own these, so a file that reopens one is a patch, not a
    * definition — the defect-9 rule, extended past the hand-written core and Rails
    * lists. A name the convention gets wrong (`rspec-rails` is `RSpec`, not `Rspec`)

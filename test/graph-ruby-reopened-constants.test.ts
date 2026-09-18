@@ -240,11 +240,11 @@ test("a reopened gem constant is not the repository's definition", async () => {
   await withGraph(
     {
       ...RAILS,
-      "Gemfile.lock": LOCKED(`    pagy (9.0)\n    rails (7.1.0)\n      activesupport (= 7.1.0)\n`),
-      "config/initializers/pagy_extra.rb": `module Pagy\n  EXTRA = 1\nend\n`,
-      "app/services/search.rb": `class Search\n  def go\n    Pagy.new(count: 1)\n  end\nend\n`,
+      "Gemfile.lock": LOCKED(`    kaminari (1.2)\n    rails (7.1.0)\n      activesupport (= 7.1.0)\n`),
+      "config/initializers/kaminari_extra.rb": `module Kaminari\n  EXTRA = 1\nend\n`,
+      "app/services/search.rb": `class Search\n  def go\n    Kaminari.paginate_array([])\n  end\nend\n`,
     },
-    (g) => assert.deepEqual(edgesTo(g, "config/initializers/pagy_extra.rb#Pagy").map((e) => e.source), []),
+    (g) => assert.deepEqual(edgesTo(g, "config/initializers/kaminari_extra.rb#Kaminari").map((e) => e.source), []),
   );
 });
 
@@ -252,11 +252,11 @@ test("a hyphenated gem name owns its first segment", async () => {
   await withGraph(
     {
       ...RAILS,
-      "Gemfile.lock": LOCKED(`    aws-record (2.15)\n`),
-      "lib/patches/aws_scan.rb": `module Aws\n  QUIET = true\nend\n`,
+      "Gemfile.lock": LOCKED(`    aws-sdk-s3 (1.1)\n`),
+      "lib/aws_ext.rb": `module Aws\n  QUIET = true\nend\n`,
       "app/services/store.rb": `class Store\n  def go\n    Aws.config\n  end\nend\n`,
     },
-    (g) => assert.deepEqual(edgesTo(g, "lib/patches/aws_scan.rb#Aws").map((e) => e.source), []),
+    (g) => assert.deepEqual(edgesTo(g, "lib/aws_ext.rb#Aws").map((e) => e.source), []),
   );
 });
 
@@ -306,9 +306,9 @@ test("without a lockfile a reopened gem constant resolves as it always did", asy
   await withGraph(
     {
       ...RAILS,
-      "config/initializers/pagy_extra.rb": `module Pagy\n  EXTRA = 1\nend\n`,
-      "app/services/search.rb": `class Search\n  def go\n    Pagy.new(count: 1)\n  end\nend\n`,
+      "config/initializers/kaminari_extra.rb": `module Kaminari\n  EXTRA = 1\nend\n`,
+      "app/services/search.rb": `class Search\n  def go\n    Kaminari.paginate_array([])\n  end\nend\n`,
     },
-    (g) => assert.deepEqual(edgesTo(g, "config/initializers/pagy_extra.rb#Pagy").map((e) => e.source), ["app/services/search.rb#Search.go"]),
+    (g) => assert.deepEqual(edgesTo(g, "config/initializers/kaminari_extra.rb#Kaminari").map((e) => e.source), ["app/services/search.rb#Search.go"]),
   );
 });

@@ -6,7 +6,7 @@
  * group that includes the shared context it came from. Extraction mints it as a free
  * function (there is no class to name), and the repo-wide unique-name tier then
  * bound every bare call of that name, anywhere, to it: every `context "…" do` in a
- * suite to one spec's `def context(stdout)`, a `delete "…"` route in
+ * suite to one spec's own helper named `context`, a `delete "…"` route in
  * config/routes.rb to a spec's `def delete`.
  *
  * Measured: a held-out RSpec application lost 2,836 of its 2,839 Ruby

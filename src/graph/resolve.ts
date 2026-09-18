@@ -240,7 +240,7 @@ export function resolveEdges(
     // against — an RSpec example group, a `shared_context`, a `module_exec` target —
     // not a top-level method on Object. So it answers calls in its own file and is
     // kept out of the repo-wide unique-name tier, which otherwise bound every bare
-    // `context "…" do` in an RSpec suite to one spec's `def context(stdout)`.
+    // `context "…" do` in an RSpec suite to one spec's own helper named `context`.
     // Measured on a held-out RSpec application: 2,836 of its 2,839 Ruby
     // `calls/inferred` edges were this, all crossing a file boundary, a few hundred
     // of them from production code into specs. The M4 comment below found the same
@@ -1179,7 +1179,7 @@ export function resolveEdges(
       let hit = constHit ?? resolveName(e.name!, e.file, kinds, perFileName, globalName);
       // The constant resolver declines a reopened foreign constant (docs/39), and the
       // bare-name ladder above then found the same reopening again by unique name:
-      // `class WireEnvelope < Hash` extended a `class Hash` patch in lib/patches.
+      // `class Envelope < Hash` extended a `class Hash` patch under lib/.
       // What it extends is Ruby's Hash, which is external — so keep the bare name,
       // exactly as `class Error < StandardError` does.
       if (hit && !constHit && e.nesting && !e.name!.includes("::")) {
