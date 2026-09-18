@@ -114,7 +114,8 @@ edge only where the source still matches what the configuration declared.
 Reformatting is free; a changed method body withdraws the edge. Its
 [README](extensions/rails-seam/README.md) documents the configuration schema.
 
-See [docs/extensions.md](docs/extensions.md) for the extension API.
+See [docs/writing-extensions.md](docs/writing-extensions.md) for when and how to write one
+for your own project, and [docs/extensions.md](docs/extensions.md) for the full API.
 
 ---
 

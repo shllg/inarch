@@ -4,6 +4,9 @@ An extension adds project-specific nodes and edges after core resolution and LSP
 enrichment, before the graph is written. Core nodes and edges cannot be rewritten
 or deleted. Extensions are disabled until explicitly approved for a repository.
 
+This page is the reference. To learn when an extension is the right tool and how to
+build one step by step, start with [writing-extensions.md](writing-extensions.md).
+
 ## Register and inspect
 
 Keep each extension in a dedicated directory. Its entry must be an ES module
@@ -23,9 +26,9 @@ and JSON file in the package, and the supplied configuration. A helper edit also
 invalidates approval. Run `ext allow` again after reviewing changes. Configuration
 is copied at approval time; editing an external config file does not change a grant.
 
-Grants live under `${XDG_STATE_HOME:-~/.local/state}/graft/extensions`, outside the
+Grants live under `${XDG_STATE_HOME:-~/.local/state}/inarch/extensions`, outside the
 repository. `GRAFT_EXTENSION_STATE_DIR` can select another external state directory.
-Project configuration, including tracked or symlinked `.graft/config.json`, cannot
+Project configuration, including tracked or symlinked `.inarch/config.json`, cannot
 register executable code. Approval permits execution during builds and automatic
 query refreshes. Revocation and package changes invalidate the graph fingerprint;
 the next build or refresh removes the previous contribution.
