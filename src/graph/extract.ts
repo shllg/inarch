@@ -346,6 +346,10 @@ export interface RawEdge {
    * the source text), and where it does not, minting one would put a dependency in
    * the graph that the file does not contain. */
   rubyTypeOnly?: boolean;
+  /** Ruby only: a carrier marking `source` — a `def` this pass could only mint as a
+   * free function — as written INSIDE A BLOCK. Its `self` is whatever the block runs
+   * against, so it is not a top-level method; see resolve.ts's global name index. */
+  rubyBlockScoped?: boolean;
   /** Ruby/Rails only (M4): the template spec this call names, exactly as written —
    * `render "shared/nav"`, `render :edit`, `layout "admin"`. A path, not a symbol:
    * `resolve.ts` turns it into a file under the view root beside the rendering file
@@ -1436,6 +1440,9 @@ function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEd
     // type, which is what lets `current_user.can_delete_account?` resolve — the
     // reader is hand-written, so no Rails macro states what it yields. A carrier,
     // never an edge; see `RawEdge.rubyTypeOnly`.
+    if (ctx.lang === "ruby" && desc.kind === "function" && rubyDefInsideBlock(node)) {
+      edges.push({ source: id, relation: "contains", file: ctx.rel, rubyTypeOnly: true, rubyBlockScoped: true });
+    }
     if (ctx.lang === "ruby" && (desc.kind === "method" || desc.kind === "function")) {
       // The body first: code outranks a comment about it. The tag only speaks when the
       // body settles nothing — `utf8(value).strip`, where the helper's own type is
@@ -3562,6 +3569,19 @@ function rubyReceiverType(node: Parser.SyntaxNode, ctx: WalkCtx): RubyReceiver |
     return { ...head, steps: [...head.steps, method.text] };
   }
   return null;
+}
+
+/** Is this `def` written inside a block — `RSpec.describe … do`, `shared_context`,
+ * `Class.new do` — rather than at a file's top level? Only a NAMED `class` or
+ * `module` stops the walk, because only those give a def an owner. `class << self`
+ * does not by itself: inside `Class.new do` it is the singleton of an anonymous
+ * class, which is exactly why this def was minted as a free function at all. */
+function rubyDefInsideBlock(node: Parser.SyntaxNode): boolean {
+  for (let p = node.parent; p; p = p.parent) {
+    if (p.type === "block" || p.type === "do_block") return true;
+    if (p.type === "class" || p.type === "module" || p.type === "program") return false;
+  }
+  return false;
 }
 
 /** The binding-table question every Ruby receiver asks, with the scope key and the

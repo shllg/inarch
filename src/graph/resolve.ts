@@ -174,6 +174,7 @@ export function resolveEdges(
 ): EdgeV1[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const globalName = new Map<string, NodeV1[]>();
+  const rubyBlockScoped = new Set(rawEdges.filter((e) => e.rubyBlockScoped).map((e) => e.source));
   const perFileName = new Map<string, Map<string, NodeV1[]>>();
   // Owner-qualified method index: "Owner.method" → candidate method nodes, for
   // typed member-call resolution (recvType + name → a specific class's method).
@@ -235,7 +236,16 @@ export function resolveEdges(
       }
       continue;
     }
-    push(globalName, n.name, n);
+    // A Ruby `def` written inside a block is a method on whatever that block runs
+    // against — an RSpec example group, a `shared_context`, a `module_exec` target —
+    // not a top-level method on Object. So it answers calls in its own file and is
+    // kept out of the repo-wide unique-name tier, which otherwise bound every bare
+    // `context "…" do` in an RSpec suite to one spec's `def context(stdout)`.
+    // Measured on a held-out RSpec application: 2,836 of its 2,839 Ruby
+    // `calls/inferred` edges were this, all crossing a file boundary, a few hundred
+    // of them from production code into specs. The M4 comment below found the same
+    // hazard for templates and fenced off only them.
+    if (!rubyBlockScoped.has(n.id)) push(globalName, n.name, n);
     let fileMap = perFileName.get(n.path);
     if (!fileMap) perFileName.set(n.path, (fileMap = new Map()));
     push(fileMap, n.name, n);
